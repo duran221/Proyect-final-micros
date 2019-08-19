@@ -1,0 +1,9 @@
+[Settings]
+Active Directory=C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\
+Target=PIC16F873A
+Active Compiler=BoostC
+Active Config=Debug
+Config=1
+[Files]
+Count=1
+File0=codigo.c

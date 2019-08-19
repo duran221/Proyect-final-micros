@@ -1,0 +1,3541 @@
+;/////////////////////////////////////////////////////////////////////////////////
+;// Code Generator: BoostC Compiler - http://www.sourceboost.com
+;// Version       : 7.43
+;// License Type  : Lite License (Unregistered)
+;// Limitations   : PIC12,PIC16 max code size:2048 words, max RAM banks:2, Non commercial use only
+;/////////////////////////////////////////////////////////////////////////////////
+
+//Realizar un ejercicio en el cual se permita a el usuario ingresar datos a travez de un teclado, al pulsar un boton 
+//conectado a el puerto b, mostrar un mensaje por tres segundos impidiendo a el usuario ingresar datos por teclado,
+//transcurridos tres segundos borrar el mensaje y permitir a el usuario seguir ingresando datos.
+
+#include <system.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+//El contador inicialmente en 128 para que empiece a escribir los números en la primer posición.
+short cont=128;
+048D  3080  	MOVLW 0x80
+048E  1283  	BCF STATUS, RP0
+048F  1303  	BCF STATUS, RP1
+0490  00C3  	MOVWF gbl_cont
+0491  01C4  	CLRF gbl_cont+D'1'
+
+//la contrasena inicialmente almacenada entre 4 y ocho digitos:
+char contrasena[8]= {'1','2','3','4'};
+0492  3031  	MOVLW 0x31
+0493  00A0  	MOVWF gbl_contrasena
+0494  3032  	MOVLW 0x32
+0495  00A1  	MOVWF gbl_contrasena+D'1'
+0496  3033  	MOVLW 0x33
+0497  00A2  	MOVWF gbl_contrasena+D'2'
+0498  3034  	MOVLW 0x34
+0499  00A3  	MOVWF gbl_contrasena+D'3'
+
+//la contraseña que ingresa el usuario por teclado:
+char contrasenaIngresada[8];
+//la contrasena digita el usuario para cambiar de clave:
+char nuevaContrasena[8];
+//un contador para ir agregando los numeros que ingresa el usuario:
+short posicion_nueva_contra=0;
+049A  01C5  	CLRF gbl_posicion_nueva_contra
+049B  01C6  	CLRF gbl_posicion_nueva_contra+D'1'
+
+//la contrasena que digita el usuario para confirmar el cambio:
+char claveConfirmar[8];
+//el contador donde se va ingresando la contrasena nueva
+short posicion_confirmar_contra=0;
+049C  01C7  	CLRF gbl_posicion_confirmar_contra
+049D  01C8  	CLRF gbl_posicion_confirmar_contra+D'1'
+
+//un contador para verificar los intentos ingresados por el usuario:
+short contadorIntento=1;
+049E  3001  	MOVLW 0x01
+049F  00C9  	MOVWF gbl_contadorIntento
+04A0  01CA  	CLRF gbl_contadorIntento+D'1'
+
+//Importante, este booleano me permite conocer si la caja está desbloqueada:
+bool desbloqueado=false;
+04A1  104D  	BCF gbl_desbloqueado,0
+
+//La bandera me permite verificar si actualmente el programa se encuentra en modo de configuracion de clave:
+bool bandera_configuracion=false;
+04A2  10CD  	BCF gbl_bandera_configuracion,1
+
+//La bandera me permite conocer si el usuario esta confirmando la clave a cambiar:
+bool bandera_confirmacion_cambio=false;
+04A3  114D  	BCF gbl_bandera_confirmacion_cambio,2
+
+//Una bandera que se activa en true si la contrasena ingresada es correcta para entrar al menu de cambio de contrasena:
+bool bandera_modificar=false;
+04A4  11CD  	BCF gbl_bandera_modificar,3
+
+//un contador que va verificando la posicion en la cual se almacena la contraseña ingresada por el usuario:
+short posicion=0;
+04A5  01CB  	CLRF gbl_posicion
+04A6  01CC  	CLRF gbl_posicion+D'1'
+
+
+//---------------------------------------------------Configuraciones Puerto Serial----------------------------------------------
+
+void habilitarTransmisionSerial(){
+
+
+	//Bit de habilitaci?n de puerto serie
+    //1: Serial port activado (configures RC7/RX/DT and RC6/TX/CK pins as serial port pins)
+    rcsta.SPEN=1;
+009A  1283  	BCF STATUS, RP0
+009B  1303  	BCF STATUS, RP1
+009C  1798  	BSF gbl_rcsta,7
+
+    
+    //Definiendo el modo de sincronizaci?n de la transmisi?n como ASINCRONA:
+    txsta.SYNC=0;
+009D  1683  	BSF STATUS, RP0
+009E  1218  	BCF gbl_txsta,4
+
+    
+    //Bit de habilitaci?n de transmisi?n de 9 bits
+    //0 = Selects 8-bit transmission
+    txsta.TX9=0;
+009F  1318  	BCF gbl_txsta,6
+
+    
+    //Bit de selecci?n de alta velocidad en baudios... Por defecto en 1 para alta velocidad:
+    txsta.BRGH=1;
+00A0  1518  	BSF gbl_txsta,2
+
+    
+    //velocidad de transmisi?n Baud
+    spbrg=25;
+00A1  3019  	MOVLW 0x19
+00A2  0099  	MOVWF gbl_spbrg
+
+    
+    //Bit de habilitaci?n de interrupci?n de transmisi?n USART
+	//1 = Enables the USART transmit interrupt
+    pie1.TXIE=1;
+00A3  160C  	BSF gbl_pie1,4
+
+    
+    //Bit de habilitaci?n de transmisi?n
+    //1 = Transmit enabled
+    txsta.TXEN=1;
+00A4  1698  	BSF gbl_txsta,5
+
+    
+}
+00A5  0008  	RETURN
+
+
+
+void desactivarTransmisionSerial(){
+
+	//Bit de habilitaci?n de puerto serie
+    //1: Serial port activado (configures RC7/RX/DT and RC6/TX/CK pins as serial port pins)
+    rcsta.SPEN=0;
+00F8  1283  	BCF STATUS, RP0
+00F9  1303  	BCF STATUS, RP1
+00FA  1398  	BCF gbl_rcsta,7
+
+    
+    //Bit de habilitaci?n de interrupci?n de transmisi?n USART
+	//1 = Enables the USART transmit interrupt
+    pie1.TXIE=0;
+00FB  1683  	BSF STATUS, RP0
+00FC  120C  	BCF gbl_pie1,4
+
+    
+    //Bit de habilitaci?n de transmisi?n
+    //1 = Transmit enabled
+    txsta.TXEN=0;
+00FD  1298  	BCF gbl_txsta,5
+
+    portc=0;
+00FE  1283  	BCF STATUS, RP0
+00FF  0187  	CLRF gbl_portc
+
+
+}
+0100  0008  	RETURN
+
+
+//------------------------------------------------------- Escritura de datos en pantalla:---------------------------------------------
+
+
+/**
+*Escribe en el LCD la posición en la cual deceo almacenar el dato en pantalla.
+*/
+void instruccion(int comando) {
+
+	//Escribimos en el puerto la posición en la cual va a ser escrito el número:
+    portc = comando;
+002B  084B  	MOVF instruccio_00015_arg_comando, W
+002C  1283  	BCF STATUS, RP0
+002D  0087  	MOVWF gbl_portc
+
+
+	//Activamos el enable de el LCD
+    porta.4=1;
+002E  1605  	BSF gbl_porta,4
+
+    //Como lo que vamos a escribir es un comando, debemos mandar un cero a el Rs:
+    porta.5=0;
+002F  1285  	BCF gbl_porta,5
+
+    //se realiza una espera de 15ms:
+    delay_ms(15);
+0030  300F  	MOVLW 0x0F
+0031  00FE  	MOVWF delay_ms_00000_arg_del
+0032  2010  	CALL delay_ms_00000
+
+
+	//se reinician los pines luego de introducir los comandos:
+    porta.4=0;
+0033  1205  	BCF gbl_porta,4
+
+    porta.5=0;
+0034  1285  	BCF gbl_porta,5
+
+}
+0035  0008  	RETURN
+
+
+
+/**
+*Limpia la pantalla para volver a ingresar un mensaje:
+*/
+void limpiarLCD(){
+
+
+	cont=128;
+00E8  3080  	MOVLW 0x80
+00E9  1283  	BCF STATUS, RP0
+00EA  1303  	BCF STATUS, RP1
+00EB  00C3  	MOVWF gbl_cont
+00EC  01C4  	CLRF gbl_cont+D'1'
+
+	posicion=0;
+00ED  01CB  	CLRF gbl_posicion
+00EE  01CC  	CLRF gbl_posicion+D'1'
+
+	//Con el 1 se limpia el display:
+	instruccion(1);
+00EF  3001  	MOVLW 0x01
+00F0  1683  	BSF STATUS, RP0
+00F1  00CB  	MOVWF instruccio_00015_arg_comando
+00F2  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+00F3  202B  	CALL instruccio_00015
+
+	delay_ms(15);
+00F4  300F  	MOVLW 0x0F
+00F5  00FE  	MOVWF delay_ms_00000_arg_del
+00F6  2010  	CALL delay_ms_00000
+
+}
+00F7  0008  	RETURN
+
+
+
+/**
+*Escribe el dato ingresado por teclado en el LCD.
+*/
+void escribirDato(int dato) {
+
+
+	//Primero escribimos el número o dato en el puerto C:
+    portc = dato;
+0036  084B  	MOVF escribirDa_00016_arg_dato, W
+0037  1283  	BCF STATUS, RP0
+0038  0087  	MOVWF gbl_portc
+
+
+	//se envia el pulso para activar el enable.
+    porta.4=1;
+0039  1605  	BSF gbl_porta,4
+
+    //activamos el Rs en uno ya que vamos a enviar el escribir el dato en el LCD
+    porta.5=1;
+003A  1685  	BSF gbl_porta,5
+
+    //Realizamos una espera prudencial de 15 ms:
+    delay_ms(15);
+003B  300F  	MOVLW 0x0F
+003C  00FE  	MOVWF delay_ms_00000_arg_del
+003D  2010  	CALL delay_ms_00000
+
+    
+    
+    porta.4=0;
+003E  1205  	BCF gbl_porta,4
+
+    porta.5=1;
+003F  1685  	BSF gbl_porta,5
+
+    
+    //Reiniciamos los valores completada la operación de escritura.
+    porta.4=0;
+0040  1205  	BCF gbl_porta,4
+
+    porta.5=0;
+0041  1285  	BCF gbl_porta,5
+
+}
+0042  0008  	RETURN
+
+
+//-------------------------------------------------------Transmisión por el puerto Serial------------------------------------
+
+//Este metodo recibe el dato que se va a transmitir
+void transmitir (int date){
+
+	//pir1.TXIF : Bit de bandera de interrupci?n de transmisi?n
+	//1:El b?fer de transmisi?n USART est? vac?o.
+	//0: El b?fer de transmisi?n USART est? lleno
+    while(!pir1.TXIF);
+0095        label8
+0095  1E0C  	BTFSS gbl_pir1,4
+0096  2895  	GOTO	label8
+
+    //transmita el dato que ingresa por p?rametro:
+    txreg=date;
+0097  0879  	MOVF transmitir_00000_arg_date, W
+0098  0099  	MOVWF gbl_txreg
+
+    return;
+}
+0099  0008  	RETURN
+
+
+void mostrarMensajeBloqueoTerminal(){
+
+
+	//Se habilita la transmisión serial:
+	habilitarTransmisionSerial();
+00A6  209A  	CALL habilitarT_00013
+
+	char mensajeBloqueo[]= "LA CAJA ESTA BLOQUEADAA";
+00A7  3020  	MOVLW 0x20
+00A8  00A2  	MOVWF mostrarMen_00017_1_mensaje_00018+D'2'
+00A9  00A7  	MOVWF mostrarMen_00017_1_mensaje_00018+D'7'
+00AA  00AC  	MOVWF mostrarMen_00017_1_mensaje_00018+D'12'
+00AB  3041  	MOVLW 0x41
+00AC  00A1  	MOVWF mostrarMen_00017_1_mensaje_00018+D'1'
+00AD  00A4  	MOVWF mostrarMen_00017_1_mensaje_00018+D'4'
+00AE  00A6  	MOVWF mostrarMen_00017_1_mensaje_00018+D'6'
+00AF  00AB  	MOVWF mostrarMen_00017_1_mensaje_00018+D'11'
+00B0  00B3  	MOVWF mostrarMen_00017_1_mensaje_00018+D'19'
+00B1  00B5  	MOVWF mostrarMen_00017_1_mensaje_00018+D'21'
+00B2  00B6  	MOVWF mostrarMen_00017_1_mensaje_00018+D'22'
+00B3  3042  	MOVLW 0x42
+00B4  00AD  	MOVWF mostrarMen_00017_1_mensaje_00018+D'13'
+00B5  3043  	MOVLW 0x43
+00B6  00A3  	MOVWF mostrarMen_00017_1_mensaje_00018+D'3'
+00B7  3044  	MOVLW 0x44
+00B8  00B4  	MOVWF mostrarMen_00017_1_mensaje_00018+D'20'
+00B9  3045  	MOVLW 0x45
+00BA  00A8  	MOVWF mostrarMen_00017_1_mensaje_00018+D'8'
+00BB  00B2  	MOVWF mostrarMen_00017_1_mensaje_00018+D'18'
+00BC  304A  	MOVLW 0x4A
+00BD  00A5  	MOVWF mostrarMen_00017_1_mensaje_00018+D'5'
+00BE  304C  	MOVLW 0x4C
+00BF  00A0  	MOVWF mostrarMen_00017_1_mensaje_00018
+00C0  00AE  	MOVWF mostrarMen_00017_1_mensaje_00018+D'14'
+00C1  304F  	MOVLW 0x4F
+00C2  00AF  	MOVWF mostrarMen_00017_1_mensaje_00018+D'15'
+00C3  3051  	MOVLW 0x51
+00C4  00B0  	MOVWF mostrarMen_00017_1_mensaje_00018+D'16'
+00C5  3053  	MOVLW 0x53
+00C6  00A9  	MOVWF mostrarMen_00017_1_mensaje_00018+D'9'
+00C7  3054  	MOVLW 0x54
+00C8  00AA  	MOVWF mostrarMen_00017_1_mensaje_00018+D'10'
+00C9  3055  	MOVLW 0x55
+00CA  00B1  	MOVWF mostrarMen_00017_1_mensaje_00018+D'17'
+00CB  01B7  	CLRF mostrarMen_00017_1_mensaje_00018+D'23'
+
+	int i;
+	for(i=0; i<sizeof(mensajeBloqueo); i++){
+00CC  1283  	BCF STATUS, RP0
+00CD  01F7  	CLRF mostrarMen_00017_1_i
+00CE  01F8  	CLRF mostrarMen_00017_1_i+D'1'
+00CF        label9
+00CF  3018  	MOVLW 0x18
+00D0  0277  	SUBWF mostrarMen_00017_1_i, W
+00D1  0878  	MOVF mostrarMen_00017_1_i+D'1', W
+00D2  1803  	BTFSC STATUS,C
+00D3  28D6  	GOTO	label10
+00D4  1903  	BTFSC STATUS,Z
+00D5  28D8  	GOTO	label11
+00D6        label10
+00D6  1FF8  	BTFSS mostrarMen_00017_1_i+D'1',7
+00E4  0AF7  	INCF mostrarMen_00017_1_i, F
+00E5  1903  	BTFSC STATUS,Z
+00E6  0AF8  	INCF mostrarMen_00017_1_i+D'1', F
+00E7  28CF  	GOTO	label9
+
+		transmitir(mensajeBloqueo[i]);
+00D8  1383  	BCF	STATUS,IRP
+00D9  30A0  	MOVLW LOW(mostrarMen_00017_1_mensaje_00018+D'0')
+00DA  0084  	MOVWF FSR
+00DB  0877  	MOVF mostrarMen_00017_1_i, W
+00DC  0784  	ADDWF FSR, F
+00DD  0800  	MOVF INDF, W
+00DE  00F9  	MOVWF transmitir_00000_arg_date
+00DF  01FA  	CLRF transmitir_00000_arg_date+D'1'
+00E0  2095  	CALL transmitir_00000
+
+		cont++;
+00E1  0AC3  	INCF gbl_cont, F
+00E2  1903  	BTFSC STATUS,Z
+00E3  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	
+}
+00D7  0008  	RETURN
+00D8        label11
+
+
+void mostrarMensajeDesbloqueoTerminal(){
+
+
+	//Se habilita la transmisión serial:
+	habilitarTransmisionSerial();
+0309  209A  	CALL habilitarT_00013
+
+	char mensaje[]= "--CAJA DESBLOQUEADA--";
+030A  3020  	MOVLW 0x20
+030B  1283  	BCF STATUS, RP0
+030C  00E7  	MOVWF mostrarMen_00019_1_mensaje+D'6'
+030D  302D  	MOVLW 0x2D
+030E  00E1  	MOVWF mostrarMen_00019_1_mensaje
+030F  00E2  	MOVWF mostrarMen_00019_1_mensaje+D'1'
+0310  00F4  	MOVWF mostrarMen_00019_1_mensaje+D'19'
+0311  00F5  	MOVWF mostrarMen_00019_1_mensaje+D'20'
+0312  3041  	MOVLW 0x41
+0313  00E4  	MOVWF mostrarMen_00019_1_mensaje+D'3'
+0314  00E6  	MOVWF mostrarMen_00019_1_mensaje+D'5'
+0315  00F1  	MOVWF mostrarMen_00019_1_mensaje+D'16'
+0316  00F3  	MOVWF mostrarMen_00019_1_mensaje+D'18'
+0317  3042  	MOVLW 0x42
+0318  00EB  	MOVWF mostrarMen_00019_1_mensaje+D'10'
+0319  3043  	MOVLW 0x43
+031A  00E3  	MOVWF mostrarMen_00019_1_mensaje+D'2'
+031B  3044  	MOVLW 0x44
+031C  00E8  	MOVWF mostrarMen_00019_1_mensaje+D'7'
+031D  00F2  	MOVWF mostrarMen_00019_1_mensaje+D'17'
+031E  3045  	MOVLW 0x45
+031F  00E9  	MOVWF mostrarMen_00019_1_mensaje+D'8'
+0320  00F0  	MOVWF mostrarMen_00019_1_mensaje+D'15'
+0321  304A  	MOVLW 0x4A
+0322  00E5  	MOVWF mostrarMen_00019_1_mensaje+D'4'
+0323  304C  	MOVLW 0x4C
+0324  00EC  	MOVWF mostrarMen_00019_1_mensaje+D'11'
+0325  304F  	MOVLW 0x4F
+0326  00ED  	MOVWF mostrarMen_00019_1_mensaje+D'12'
+0327  3051  	MOVLW 0x51
+0328  00EE  	MOVWF mostrarMen_00019_1_mensaje+D'13'
+0329  3053  	MOVLW 0x53
+032A  00EA  	MOVWF mostrarMen_00019_1_mensaje+D'9'
+032B  3055  	MOVLW 0x55
+032C  00EF  	MOVWF mostrarMen_00019_1_mensaje+D'14'
+032D  01F6  	CLRF mostrarMen_00019_1_mensaje+D'21'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+032E  01F7  	CLRF mostrarMen_00019_1_i
+032F  01F8  	CLRF mostrarMen_00019_1_i+D'1'
+0330        label51
+0330  3016  	MOVLW 0x16
+0331  0277  	SUBWF mostrarMen_00019_1_i, W
+0332  0878  	MOVF mostrarMen_00019_1_i+D'1', W
+0333  1803  	BTFSC STATUS,C
+0334  2B37  	GOTO	label52
+0335  1903  	BTFSC STATUS,Z
+0336  2B39  	GOTO	label53
+0337        label52
+0337  1FF8  	BTFSS mostrarMen_00019_1_i+D'1',7
+0345  0AF7  	INCF mostrarMen_00019_1_i, F
+0346  1903  	BTFSC STATUS,Z
+0347  0AF8  	INCF mostrarMen_00019_1_i+D'1', F
+0348  2B30  	GOTO	label51
+
+		transmitir(mensaje[i]);
+0339  1383  	BCF	STATUS,IRP
+033A  3061  	MOVLW LOW(mostrarMen_00019_1_mensaje+D'0')
+033B  0084  	MOVWF FSR
+033C  0877  	MOVF mostrarMen_00019_1_i, W
+033D  0784  	ADDWF FSR, F
+033E  0800  	MOVF INDF, W
+033F  00F9  	MOVWF transmitir_00000_arg_date
+0340  01FA  	CLRF transmitir_00000_arg_date+D'1'
+0341  2095  	CALL transmitir_00000
+
+		cont++;
+0342  0AC3  	INCF gbl_cont, F
+0343  1903  	BTFSC STATUS,Z
+0344  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	
+}
+0338  0008  	RETURN
+0339        label53
+
+
+
+//----------------------------------------------------- Mensajes Programados Para mostrar por pantalla---------------------------------
+
+/**
+*Muestra un mensaje cuando la caja se encuentra cerrada
+*/
+void mensajeCajaCerrada(){
+
+//El mensaje a mostrar por pantalla:
+	char mensaje[]= "++CAJA CERRADA++";
+0408  3020  	MOVLW 0x20
+0409  1283  	BCF STATUS, RP0
+040A  1303  	BCF STATUS, RP1
+040B  00D4  	MOVWF mensajeCaj_0001A_1_mensaje+D'6'
+040C  302B  	MOVLW 0x2B
+040D  00CE  	MOVWF mensajeCaj_0001A_1_mensaje
+040E  00CF  	MOVWF mensajeCaj_0001A_1_mensaje+D'1'
+040F  00DC  	MOVWF mensajeCaj_0001A_1_mensaje+D'14'
+0410  00DD  	MOVWF mensajeCaj_0001A_1_mensaje+D'15'
+0411  3041  	MOVLW 0x41
+0412  00D1  	MOVWF mensajeCaj_0001A_1_mensaje+D'3'
+0413  00D3  	MOVWF mensajeCaj_0001A_1_mensaje+D'5'
+0414  00D9  	MOVWF mensajeCaj_0001A_1_mensaje+D'11'
+0415  00DB  	MOVWF mensajeCaj_0001A_1_mensaje+D'13'
+0416  3043  	MOVLW 0x43
+0417  00D0  	MOVWF mensajeCaj_0001A_1_mensaje+D'2'
+0418  00D5  	MOVWF mensajeCaj_0001A_1_mensaje+D'7'
+0419  3044  	MOVLW 0x44
+041A  00DA  	MOVWF mensajeCaj_0001A_1_mensaje+D'12'
+041B  3045  	MOVLW 0x45
+041C  00D6  	MOVWF mensajeCaj_0001A_1_mensaje+D'8'
+041D  304A  	MOVLW 0x4A
+041E  00D2  	MOVWF mensajeCaj_0001A_1_mensaje+D'4'
+041F  3052  	MOVLW 0x52
+0420  00D7  	MOVWF mensajeCaj_0001A_1_mensaje+D'9'
+0421  00D8  	MOVWF mensajeCaj_0001A_1_mensaje+D'10'
+0422  01DE  	CLRF mensajeCaj_0001A_1_mensaje+D'16'
+
+	
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+0423  01DF  	CLRF mensajeCaj_0001A_1_i
+0424  01E0  	CLRF mensajeCaj_0001A_1_i+D'1'
+0425        label72
+0425  3011  	MOVLW 0x11
+0426  025F  	SUBWF mensajeCaj_0001A_1_i, W
+0427  0860  	MOVF mensajeCaj_0001A_1_i+D'1', W
+0428  1803  	BTFSC STATUS,C
+0429  2C2C  	GOTO	label73
+042A  1903  	BTFSC STATUS,Z
+042B  2C2E  	GOTO	label74
+042C        label73
+042C  1FE0  	BTFSS mensajeCaj_0001A_1_i+D'1',7
+042D  2C47  	GOTO	label75
+042E        label74
+0443  0ADF  	INCF mensajeCaj_0001A_1_i, F
+0444  1903  	BTFSC STATUS,Z
+0445  0AE0  	INCF mensajeCaj_0001A_1_i+D'1', F
+0446  2C25  	GOTO	label72
+0447        label75
+
+		//se manda la posicion en la cual se escribe el dato:
+		instruccion(cont);
+042E  0843  	MOVF gbl_cont, W
+042F  1683  	BSF STATUS, RP0
+0430  00CB  	MOVWF instruccio_00015_arg_comando
+0431  1283  	BCF STATUS, RP0
+0432  0844  	MOVF gbl_cont+D'1', W
+0433  1683  	BSF STATUS, RP0
+0434  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0435  202B  	CALL instruccio_00015
+
+		//se escribe el dato en pantalla:
+		escribirDato(mensaje[i]);
+0436  1383  	BCF	STATUS,IRP
+0437  304E  	MOVLW LOW(mensajeCaj_0001A_1_mensaje+D'0')
+0438  0084  	MOVWF FSR
+0439  085F  	MOVF mensajeCaj_0001A_1_i, W
+043A  0784  	ADDWF FSR, F
+043B  0800  	MOVF INDF, W
+043C  1683  	BSF STATUS, RP0
+043D  00CB  	MOVWF escribirDa_00016_arg_dato
+043E  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+043F  2036  	CALL escribirDa_00016
+
+		cont++;
+0440  0AC3  	INCF gbl_cont, F
+0441  1903  	BTFSC STATUS,Z
+0442  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	//escribe los datos encolados en el lcd
+	instruccion(15);
+0447  300F  	MOVLW 0x0F
+0448  1683  	BSF STATUS, RP0
+0449  00CB  	MOVWF instruccio_00015_arg_comando
+044A  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+044B  202B  	CALL instruccio_00015
+
+	cont=128;
+044C  3080  	MOVLW 0x80
+044D  00C3  	MOVWF gbl_cont
+044E  01C4  	CLRF gbl_cont+D'1'
+
+}
+044F  0008  	RETURN
+
+
+
+/**
+*Escribe un mensaje en pantalla
+*
+*/
+void mensajeIngresoContrasena(){
+
+	
+	//El mensaje a mostrar por pantalla:
+	char mensaje[]= "INSERTE CLAVE";
+03C0  3020  	MOVLW 0x20
+03C1  1283  	BCF STATUS, RP0
+03C2  1303  	BCF STATUS, RP1
+03C3  00D5  	MOVWF mensajeIng_0001B_1_mensaje+D'7'
+03C4  3041  	MOVLW 0x41
+03C5  00D8  	MOVWF mensajeIng_0001B_1_mensaje+D'10'
+03C6  3043  	MOVLW 0x43
+03C7  00D6  	MOVWF mensajeIng_0001B_1_mensaje+D'8'
+03C8  3045  	MOVLW 0x45
+03C9  00D1  	MOVWF mensajeIng_0001B_1_mensaje+D'3'
+03CA  00D4  	MOVWF mensajeIng_0001B_1_mensaje+D'6'
+03CB  00DA  	MOVWF mensajeIng_0001B_1_mensaje+D'12'
+03CC  3049  	MOVLW 0x49
+03CD  00CE  	MOVWF mensajeIng_0001B_1_mensaje
+03CE  304C  	MOVLW 0x4C
+03CF  00D7  	MOVWF mensajeIng_0001B_1_mensaje+D'9'
+03D0  304E  	MOVLW 0x4E
+03D1  00CF  	MOVWF mensajeIng_0001B_1_mensaje+D'1'
+03D2  3052  	MOVLW 0x52
+03D3  00D2  	MOVWF mensajeIng_0001B_1_mensaje+D'4'
+03D4  3053  	MOVLW 0x53
+03D5  00D0  	MOVWF mensajeIng_0001B_1_mensaje+D'2'
+03D6  3054  	MOVLW 0x54
+03D7  00D3  	MOVWF mensajeIng_0001B_1_mensaje+D'5'
+03D8  3056  	MOVLW 0x56
+03D9  00D9  	MOVWF mensajeIng_0001B_1_mensaje+D'11'
+03DA  01DB  	CLRF mensajeIng_0001B_1_mensaje+D'13'
+
+	
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+03DB  01DC  	CLRF mensajeIng_0001B_1_i
+03DC  01DD  	CLRF mensajeIng_0001B_1_i+D'1'
+03DD        label68
+03DD  300E  	MOVLW 0x0E
+03DE  025C  	SUBWF mensajeIng_0001B_1_i, W
+03DF  085D  	MOVF mensajeIng_0001B_1_i+D'1', W
+03E0  1803  	BTFSC STATUS,C
+03E1  2BE4  	GOTO	label69
+03E2  1903  	BTFSC STATUS,Z
+03E3  2BE6  	GOTO	label70
+03E4        label69
+03E4  1FDD  	BTFSS mensajeIng_0001B_1_i+D'1',7
+03E5  2BFF  	GOTO	label71
+03E6        label70
+03FB  0ADC  	INCF mensajeIng_0001B_1_i, F
+03FC  1903  	BTFSC STATUS,Z
+03FD  0ADD  	INCF mensajeIng_0001B_1_i+D'1', F
+03FE  2BDD  	GOTO	label68
+03FF        label71
+
+		//se manda la posicion en la cual se escribe el dato:
+		instruccion(cont);
+03E6  0843  	MOVF gbl_cont, W
+03E7  1683  	BSF STATUS, RP0
+03E8  00CB  	MOVWF instruccio_00015_arg_comando
+03E9  1283  	BCF STATUS, RP0
+03EA  0844  	MOVF gbl_cont+D'1', W
+03EB  1683  	BSF STATUS, RP0
+03EC  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+03ED  202B  	CALL instruccio_00015
+
+		//se escribe el dato en pantalla:
+		escribirDato(mensaje[i]);
+03EE  1383  	BCF	STATUS,IRP
+03EF  304E  	MOVLW LOW(mensajeIng_0001B_1_mensaje+D'0')
+03F0  0084  	MOVWF FSR
+03F1  085C  	MOVF mensajeIng_0001B_1_i, W
+03F2  0784  	ADDWF FSR, F
+03F3  0800  	MOVF INDF, W
+03F4  1683  	BSF STATUS, RP0
+03F5  00CB  	MOVWF escribirDa_00016_arg_dato
+03F6  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+03F7  2036  	CALL escribirDa_00016
+
+		cont++;
+03F8  0AC3  	INCF gbl_cont, F
+03F9  1903  	BTFSC STATUS,Z
+03FA  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	//escribe los datos encolados en el lcd
+	instruccion(15);
+03FF  300F  	MOVLW 0x0F
+0400  1683  	BSF STATUS, RP0
+0401  00CB  	MOVWF instruccio_00015_arg_comando
+0402  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0403  202B  	CALL instruccio_00015
+
+	cont=128;
+0404  3080  	MOVLW 0x80
+0405  00C3  	MOVWF gbl_cont
+0406  01C4  	CLRF gbl_cont+D'1'
+
+}
+0407  0008  	RETURN
+
+
+
+
+/**
+*Bloquea la caja fuerte impidiendo su uso, ademas, muestra un mensaje indicando el bloqueo
+*/
+void mostrarMensajeBloqueo(){
+
+	
+	//se limpia el display:
+	limpiarLCD();
+02C8  20E8  	CALL limpiarLCD_00000
+
+	
+	char mensaje[]= "INSERTE LLAVE";
+02C9  3020  	MOVLW 0x20
+02CA  00E8  	MOVWF mostrarMen_0001C_1_mensaje+D'7'
+02CB  3041  	MOVLW 0x41
+02CC  00EB  	MOVWF mostrarMen_0001C_1_mensaje+D'10'
+02CD  3045  	MOVLW 0x45
+02CE  00E4  	MOVWF mostrarMen_0001C_1_mensaje+D'3'
+02CF  00E7  	MOVWF mostrarMen_0001C_1_mensaje+D'6'
+02D0  00ED  	MOVWF mostrarMen_0001C_1_mensaje+D'12'
+02D1  3049  	MOVLW 0x49
+02D2  00E1  	MOVWF mostrarMen_0001C_1_mensaje
+02D3  304C  	MOVLW 0x4C
+02D4  00E9  	MOVWF mostrarMen_0001C_1_mensaje+D'8'
+02D5  00EA  	MOVWF mostrarMen_0001C_1_mensaje+D'9'
+02D6  304E  	MOVLW 0x4E
+02D7  00E2  	MOVWF mostrarMen_0001C_1_mensaje+D'1'
+02D8  3052  	MOVLW 0x52
+02D9  00E5  	MOVWF mostrarMen_0001C_1_mensaje+D'4'
+02DA  3053  	MOVLW 0x53
+02DB  00E3  	MOVWF mostrarMen_0001C_1_mensaje+D'2'
+02DC  3054  	MOVLW 0x54
+02DD  00E6  	MOVWF mostrarMen_0001C_1_mensaje+D'5'
+02DE  3056  	MOVLW 0x56
+02DF  00EC  	MOVWF mostrarMen_0001C_1_mensaje+D'11'
+02E0  01EE  	CLRF mostrarMen_0001C_1_mensaje+D'13'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+02E1  01EF  	CLRF mostrarMen_0001C_1_i
+02E2  01F0  	CLRF mostrarMen_0001C_1_i+D'1'
+02E3        label47
+02E3  300E  	MOVLW 0x0E
+02E4  026F  	SUBWF mostrarMen_0001C_1_i, W
+02E5  0870  	MOVF mostrarMen_0001C_1_i+D'1', W
+02E6  1803  	BTFSC STATUS,C
+02E7  2AEA  	GOTO	label48
+02E8  1903  	BTFSC STATUS,Z
+02E9  2AEC  	GOTO	label49
+02EA        label48
+02EA  1FF0  	BTFSS mostrarMen_0001C_1_i+D'1',7
+02EB  2B05  	GOTO	label50
+02EC        label49
+0301  0AEF  	INCF mostrarMen_0001C_1_i, F
+0302  1903  	BTFSC STATUS,Z
+0303  0AF0  	INCF mostrarMen_0001C_1_i+D'1', F
+0304  2AE3  	GOTO	label47
+0305        label50
+
+		//se manda la posicion en la cual se escribe el dato:
+		instruccion(cont);
+02EC  0843  	MOVF gbl_cont, W
+02ED  1683  	BSF STATUS, RP0
+02EE  00CB  	MOVWF instruccio_00015_arg_comando
+02EF  1283  	BCF STATUS, RP0
+02F0  0844  	MOVF gbl_cont+D'1', W
+02F1  1683  	BSF STATUS, RP0
+02F2  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+02F3  202B  	CALL instruccio_00015
+
+		//se escribe el dato en pantalla:
+		escribirDato(mensaje[i]);
+02F4  1383  	BCF	STATUS,IRP
+02F5  3061  	MOVLW LOW(mostrarMen_0001C_1_mensaje+D'0')
+02F6  0084  	MOVWF FSR
+02F7  086F  	MOVF mostrarMen_0001C_1_i, W
+02F8  0784  	ADDWF FSR, F
+02F9  0800  	MOVF INDF, W
+02FA  1683  	BSF STATUS, RP0
+02FB  00CB  	MOVWF escribirDa_00016_arg_dato
+02FC  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+02FD  2036  	CALL escribirDa_00016
+
+		cont++;
+02FE  0AC3  	INCF gbl_cont, F
+02FF  1903  	BTFSC STATUS,Z
+0300  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	delay_s(1);
+0305  3001  	MOVLW 0x01
+0306  00F6  	MOVWF delay_s_00000_arg_del
+0307  201C  	CALL delay_s_00000
+
+	
+}
+0308  0008  	RETURN
+
+
+/**
+*Muestra un mensaje indicando ingresar la nueva clave:
+*/
+void mostrarMensajeIngresoContrasena(){
+
+	
+	//se limpia el display:
+	limpiarLCD();
+028B  20E8  	CALL limpiarLCD_00000
+
+	
+	char mensaje[]= "NUEVA CLAVE";
+028C  3020  	MOVLW 0x20
+028D  00EA  	MOVWF mostrarMen_0001D_1_mensaje+D'5'
+028E  3041  	MOVLW 0x41
+028F  00E9  	MOVWF mostrarMen_0001D_1_mensaje+D'4'
+0290  00ED  	MOVWF mostrarMen_0001D_1_mensaje+D'8'
+0291  3043  	MOVLW 0x43
+0292  00EB  	MOVWF mostrarMen_0001D_1_mensaje+D'6'
+0293  3045  	MOVLW 0x45
+0294  00E7  	MOVWF mostrarMen_0001D_1_mensaje+D'2'
+0295  00EF  	MOVWF mostrarMen_0001D_1_mensaje+D'10'
+0296  304C  	MOVLW 0x4C
+0297  00EC  	MOVWF mostrarMen_0001D_1_mensaje+D'7'
+0298  304E  	MOVLW 0x4E
+0299  00E5  	MOVWF mostrarMen_0001D_1_mensaje
+029A  3055  	MOVLW 0x55
+029B  00E6  	MOVWF mostrarMen_0001D_1_mensaje+D'1'
+029C  3056  	MOVLW 0x56
+029D  00E8  	MOVWF mostrarMen_0001D_1_mensaje+D'3'
+029E  00EE  	MOVWF mostrarMen_0001D_1_mensaje+D'9'
+029F  01F0  	CLRF mostrarMen_0001D_1_mensaje+D'11'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+02A0  01F1  	CLRF mostrarMen_0001D_1_i
+02A1  01F2  	CLRF mostrarMen_0001D_1_i+D'1'
+02A2        label43
+02A2  300C  	MOVLW 0x0C
+02A3  0271  	SUBWF mostrarMen_0001D_1_i, W
+02A4  0872  	MOVF mostrarMen_0001D_1_i+D'1', W
+02A5  1803  	BTFSC STATUS,C
+02A6  2AA9  	GOTO	label44
+02A7  1903  	BTFSC STATUS,Z
+02A8  2AAB  	GOTO	label45
+02A9        label44
+02A9  1FF2  	BTFSS mostrarMen_0001D_1_i+D'1',7
+02AA  2AC4  	GOTO	label46
+02AB        label45
+02C0  0AF1  	INCF mostrarMen_0001D_1_i, F
+02C1  1903  	BTFSC STATUS,Z
+02C2  0AF2  	INCF mostrarMen_0001D_1_i+D'1', F
+02C3  2AA2  	GOTO	label43
+02C4        label46
+
+		//se manda la posicion en la cual se escribe el dato:
+		instruccion(cont);
+02AB  0843  	MOVF gbl_cont, W
+02AC  1683  	BSF STATUS, RP0
+02AD  00CB  	MOVWF instruccio_00015_arg_comando
+02AE  1283  	BCF STATUS, RP0
+02AF  0844  	MOVF gbl_cont+D'1', W
+02B0  1683  	BSF STATUS, RP0
+02B1  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+02B2  202B  	CALL instruccio_00015
+
+		//se escribe el dato en pantalla:
+		escribirDato(mensaje[i]);
+02B3  1383  	BCF	STATUS,IRP
+02B4  3065  	MOVLW LOW(mostrarMen_0001D_1_mensaje+D'0')
+02B5  0084  	MOVWF FSR
+02B6  0871  	MOVF mostrarMen_0001D_1_i, W
+02B7  0784  	ADDWF FSR, F
+02B8  0800  	MOVF INDF, W
+02B9  1683  	BSF STATUS, RP0
+02BA  00CB  	MOVWF escribirDa_00016_arg_dato
+02BB  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+02BC  2036  	CALL escribirDa_00016
+
+		cont++;
+02BD  0AC3  	INCF gbl_cont, F
+02BE  1903  	BTFSC STATUS,Z
+02BF  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	delay_s(1);
+02C4  3001  	MOVLW 0x01
+02C5  00F6  	MOVWF delay_s_00000_arg_del
+02C6  201C  	CALL delay_s_00000
+
+	
+}
+02C7  0008  	RETURN
+
+
+/**
+*Muestra un mensaje indicando confirmar la nueva clave:
+*/
+void mostrarMensajeConfirmar(){
+
+	
+	//se limpia el display:
+	limpiarLCD();
+0247  20E8  	CALL limpiarLCD_00000
+
+	
+	char mensaje[]= "CONFIRME CLAVE";
+0248  3020  	MOVLW 0x20
+0249  00ED  	MOVWF mostrarMen_0001E_1_mensaje+D'8'
+024A  3041  	MOVLW 0x41
+024B  00F0  	MOVWF mostrarMen_0001E_1_mensaje+D'11'
+024C  3043  	MOVLW 0x43
+024D  00E5  	MOVWF mostrarMen_0001E_1_mensaje
+024E  00EE  	MOVWF mostrarMen_0001E_1_mensaje+D'9'
+024F  3045  	MOVLW 0x45
+0250  00EC  	MOVWF mostrarMen_0001E_1_mensaje+D'7'
+0251  00F2  	MOVWF mostrarMen_0001E_1_mensaje+D'13'
+0252  3046  	MOVLW 0x46
+0253  00E8  	MOVWF mostrarMen_0001E_1_mensaje+D'3'
+0254  3049  	MOVLW 0x49
+0255  00E9  	MOVWF mostrarMen_0001E_1_mensaje+D'4'
+0256  304C  	MOVLW 0x4C
+0257  00EF  	MOVWF mostrarMen_0001E_1_mensaje+D'10'
+0258  304D  	MOVLW 0x4D
+0259  00EB  	MOVWF mostrarMen_0001E_1_mensaje+D'6'
+025A  304E  	MOVLW 0x4E
+025B  00E7  	MOVWF mostrarMen_0001E_1_mensaje+D'2'
+025C  304F  	MOVLW 0x4F
+025D  00E6  	MOVWF mostrarMen_0001E_1_mensaje+D'1'
+025E  3052  	MOVLW 0x52
+025F  00EA  	MOVWF mostrarMen_0001E_1_mensaje+D'5'
+0260  3056  	MOVLW 0x56
+0261  00F1  	MOVWF mostrarMen_0001E_1_mensaje+D'12'
+0262  01F3  	CLRF mostrarMen_0001E_1_mensaje+D'14'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+0263  01F4  	CLRF mostrarMen_0001E_1_i
+0264  01F5  	CLRF mostrarMen_0001E_1_i+D'1'
+0265        label39
+0265  300F  	MOVLW 0x0F
+0266  0274  	SUBWF mostrarMen_0001E_1_i, W
+0267  0875  	MOVF mostrarMen_0001E_1_i+D'1', W
+0268  1803  	BTFSC STATUS,C
+0269  2A6C  	GOTO	label40
+026A  1903  	BTFSC STATUS,Z
+026B  2A6E  	GOTO	label41
+026C        label40
+026C  1FF5  	BTFSS mostrarMen_0001E_1_i+D'1',7
+026D  2A87  	GOTO	label42
+026E        label41
+0283  0AF4  	INCF mostrarMen_0001E_1_i, F
+0284  1903  	BTFSC STATUS,Z
+0285  0AF5  	INCF mostrarMen_0001E_1_i+D'1', F
+0286  2A65  	GOTO	label39
+0287        label42
+
+		//se manda la posicion en la cual se escribe el dato:
+		instruccion(cont);
+026E  0843  	MOVF gbl_cont, W
+026F  1683  	BSF STATUS, RP0
+0270  00CB  	MOVWF instruccio_00015_arg_comando
+0271  1283  	BCF STATUS, RP0
+0272  0844  	MOVF gbl_cont+D'1', W
+0273  1683  	BSF STATUS, RP0
+0274  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0275  202B  	CALL instruccio_00015
+
+		//se escribe el dato en pantalla:
+		escribirDato(mensaje[i]);
+0276  1383  	BCF	STATUS,IRP
+0277  3065  	MOVLW LOW(mostrarMen_0001E_1_mensaje+D'0')
+0278  0084  	MOVWF FSR
+0279  0874  	MOVF mostrarMen_0001E_1_i, W
+027A  0784  	ADDWF FSR, F
+027B  0800  	MOVF INDF, W
+027C  1683  	BSF STATUS, RP0
+027D  00CB  	MOVWF escribirDa_00016_arg_dato
+027E  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+027F  2036  	CALL escribirDa_00016
+
+		cont++;
+0280  0AC3  	INCF gbl_cont, F
+0281  1903  	BTFSC STATUS,Z
+0282  0AC4  	INCF gbl_cont+D'1', F
+
+		
+	}
+	delay_s(1);
+0287  3001  	MOVLW 0x01
+0288  00F6  	MOVWF delay_s_00000_arg_del
+0289  201C  	CALL delay_s_00000
+
+}
+028A  0008  	RETURN
+
+
+
+/**
+*Muestra por pantalla el mensaje indicando que la contrase?a es correcta
+*/
+void mensajeCorrecto(){
+
+	
+	char mensaje[]="BUEN DIA USUARIO";
+0043  3020  	MOVLW 0x20
+0044  1683  	BSF STATUS, RP0
+0045  1303  	BCF STATUS, RP1
+0046  00BC  	MOVWF mensajeCor_0001F_1_mensaje+D'4'
+0047  00C0  	MOVWF mensajeCor_0001F_1_mensaje+D'8'
+0048  3041  	MOVLW 0x41
+0049  00BF  	MOVWF mensajeCor_0001F_1_mensaje+D'7'
+004A  00C4  	MOVWF mensajeCor_0001F_1_mensaje+D'12'
+004B  3042  	MOVLW 0x42
+004C  00B8  	MOVWF mensajeCor_0001F_1_mensaje
+004D  3044  	MOVLW 0x44
+004E  00BD  	MOVWF mensajeCor_0001F_1_mensaje+D'5'
+004F  3045  	MOVLW 0x45
+0050  00BA  	MOVWF mensajeCor_0001F_1_mensaje+D'2'
+0051  3049  	MOVLW 0x49
+0052  00BE  	MOVWF mensajeCor_0001F_1_mensaje+D'6'
+0053  00C6  	MOVWF mensajeCor_0001F_1_mensaje+D'14'
+0054  304E  	MOVLW 0x4E
+0055  00BB  	MOVWF mensajeCor_0001F_1_mensaje+D'3'
+0056  304F  	MOVLW 0x4F
+0057  00C7  	MOVWF mensajeCor_0001F_1_mensaje+D'15'
+0058  3052  	MOVLW 0x52
+0059  00C5  	MOVWF mensajeCor_0001F_1_mensaje+D'13'
+005A  3053  	MOVLW 0x53
+005B  00C2  	MOVWF mensajeCor_0001F_1_mensaje+D'10'
+005C  3055  	MOVLW 0x55
+005D  00B9  	MOVWF mensajeCor_0001F_1_mensaje+D'1'
+005E  00C1  	MOVWF mensajeCor_0001F_1_mensaje+D'9'
+005F  00C3  	MOVWF mensajeCor_0001F_1_mensaje+D'11'
+0060  01C8  	CLRF mensajeCor_0001F_1_mensaje+D'16'
+
+	int posicio=128;
+0061  3080  	MOVLW 0x80
+0062  1283  	BCF STATUS, RP0
+0063  00FC  	MOVWF mensajeCor_0001F_1_posicio
+0064  01FD  	CLRF mensajeCor_0001F_1_posicio+D'1'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+0065  1683  	BSF STATUS, RP0
+0066  01C9  	CLRF mensajeCor_0001F_1_i
+0067  01CA  	CLRF mensajeCor_0001F_1_i+D'1'
+0068        label4
+0068  3011  	MOVLW 0x11
+0069  0249  	SUBWF mensajeCor_0001F_1_i, W
+006A  084A  	MOVF mensajeCor_0001F_1_i+D'1', W
+006B  1803  	BTFSC STATUS,C
+006C  286F  	GOTO	label5
+006D  1903  	BTFSC STATUS,Z
+006E  2871  	GOTO	label6
+006F        label5
+006F  1FCA  	BTFSS mensajeCor_0001F_1_i+D'1',7
+0070  288C  	GOTO	label7
+0071        label6
+0087  1683  	BSF STATUS, RP0
+0088  0AC9  	INCF mensajeCor_0001F_1_i, F
+0089  1903  	BTFSC STATUS,Z
+008A  0ACA  	INCF mensajeCor_0001F_1_i+D'1', F
+008B  2868  	GOTO	label4
+008C        label7
+
+		instruccion(posicio);
+0071  1283  	BCF STATUS, RP0
+0072  087C  	MOVF mensajeCor_0001F_1_posicio, W
+0073  1683  	BSF STATUS, RP0
+0074  00CB  	MOVWF instruccio_00015_arg_comando
+0075  1283  	BCF STATUS, RP0
+0076  087D  	MOVF mensajeCor_0001F_1_posicio+D'1', W
+0077  1683  	BSF STATUS, RP0
+0078  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0079  202B  	CALL instruccio_00015
+
+		escribirDato(mensaje[i]);
+007A  1383  	BCF	STATUS,IRP
+007B  30B8  	MOVLW LOW(mensajeCor_0001F_1_mensaje+D'0')
+007C  0084  	MOVWF FSR
+007D  1683  	BSF STATUS, RP0
+007E  0849  	MOVF mensajeCor_0001F_1_i, W
+007F  0784  	ADDWF FSR, F
+0080  0800  	MOVF INDF, W
+0081  00CB  	MOVWF escribirDa_00016_arg_dato
+0082  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+0083  2036  	CALL escribirDa_00016
+
+		posicio++;
+0084  0AFC  	INCF mensajeCor_0001F_1_posicio, F
+0085  1903  	BTFSC STATUS,Z
+0086  0AFD  	INCF mensajeCor_0001F_1_posicio+D'1', F
+
+	}
+	
+	cont=128;
+008C  3080  	MOVLW 0x80
+008D  1283  	BCF STATUS, RP0
+008E  00C3  	MOVWF gbl_cont
+008F  01C4  	CLRF gbl_cont+D'1'
+
+	posicion=0;
+0090  01CB  	CLRF gbl_posicion
+0091  01CC  	CLRF gbl_posicion+D'1'
+
+	
+	//Se reinicia el contador de intentos para no generar problemas de ingreso
+	contadorIntento=0;
+0092  01C9  	CLRF gbl_contadorIntento
+0093  01CA  	CLRF gbl_contadorIntento+D'1'
+
+
+}
+0094  0008  	RETURN
+
+void mensajeCambioContrasena(){
+
+	limpiarLCD();
+01C6  20E8  	CALL limpiarLCD_00000
+
+	
+	char mensaje[]="CAMBIO OK";
+01C7  3020  	MOVLW 0x20
+01C8  00EE  	MOVWF mensajeCam_00020_1_mensaje+D'6'
+01C9  3041  	MOVLW 0x41
+01CA  00E9  	MOVWF mensajeCam_00020_1_mensaje+D'1'
+01CB  3042  	MOVLW 0x42
+01CC  00EB  	MOVWF mensajeCam_00020_1_mensaje+D'3'
+01CD  3043  	MOVLW 0x43
+01CE  00E8  	MOVWF mensajeCam_00020_1_mensaje
+01CF  3049  	MOVLW 0x49
+01D0  00EC  	MOVWF mensajeCam_00020_1_mensaje+D'4'
+01D1  304B  	MOVLW 0x4B
+01D2  00F0  	MOVWF mensajeCam_00020_1_mensaje+D'8'
+01D3  304D  	MOVLW 0x4D
+01D4  00EA  	MOVWF mensajeCam_00020_1_mensaje+D'2'
+01D5  304F  	MOVLW 0x4F
+01D6  00ED  	MOVWF mensajeCam_00020_1_mensaje+D'5'
+01D7  00EF  	MOVWF mensajeCam_00020_1_mensaje+D'7'
+01D8  01F1  	CLRF mensajeCam_00020_1_mensaje+D'9'
+
+	int posicio=128;
+01D9  3080  	MOVLW 0x80
+01DA  00F2  	MOVWF mensajeCam_00020_1_posicio
+01DB  01F3  	CLRF mensajeCam_00020_1_posicio+D'1'
+
+	int i;
+	for(i=0; i<sizeof(mensaje); i++){
+01DC  01F4  	CLRF mensajeCam_00020_1_i
+01DD  01F5  	CLRF mensajeCam_00020_1_i+D'1'
+01DE        label28
+01DE  300A  	MOVLW 0x0A
+01DF  0274  	SUBWF mensajeCam_00020_1_i, W
+01E0  0875  	MOVF mensajeCam_00020_1_i+D'1', W
+01E1  1803  	BTFSC STATUS,C
+01E2  29E5  	GOTO	label29
+01E3  1903  	BTFSC STATUS,Z
+01E4  29E7  	GOTO	label30
+01E5        label29
+01E5  1FF5  	BTFSS mensajeCam_00020_1_i+D'1',7
+01E6  2A00  	GOTO	label31
+01E7        label30
+01FC  0AF4  	INCF mensajeCam_00020_1_i, F
+01FD  1903  	BTFSC STATUS,Z
+01FE  0AF5  	INCF mensajeCam_00020_1_i+D'1', F
+01FF  29DE  	GOTO	label28
+0200        label31
+
+		instruccion(posicio);
+01E7  0872  	MOVF mensajeCam_00020_1_posicio, W
+01E8  1683  	BSF STATUS, RP0
+01E9  00CB  	MOVWF instruccio_00015_arg_comando
+01EA  1283  	BCF STATUS, RP0
+01EB  0873  	MOVF mensajeCam_00020_1_posicio+D'1', W
+01EC  1683  	BSF STATUS, RP0
+01ED  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+01EE  202B  	CALL instruccio_00015
+
+		escribirDato(mensaje[i]);
+01EF  1383  	BCF	STATUS,IRP
+01F0  3068  	MOVLW LOW(mensajeCam_00020_1_mensaje+D'0')
+01F1  0084  	MOVWF FSR
+01F2  0874  	MOVF mensajeCam_00020_1_i, W
+01F3  0784  	ADDWF FSR, F
+01F4  0800  	MOVF INDF, W
+01F5  1683  	BSF STATUS, RP0
+01F6  00CB  	MOVWF escribirDa_00016_arg_dato
+01F7  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+01F8  2036  	CALL escribirDa_00016
+
+		posicio++;
+01F9  0AF2  	INCF mensajeCam_00020_1_posicio, F
+01FA  1903  	BTFSC STATUS,Z
+01FB  0AF3  	INCF mensajeCam_00020_1_posicio+D'1', F
+
+	}
+	
+	
+	//Se reinicia el contador de intentos para no generar problemas de ingreso
+	contadorIntento=0;
+0200  01C9  	CLRF gbl_contadorIntento
+0201  01CA  	CLRF gbl_contadorIntento+D'1'
+
+}
+0202  0008  	RETURN
+
+
+/**
+*Muestra un mensaje cuando hay un error en el cambio de contrasena
+*/
+void mensajeErrorCambio(){
+
+	limpiarLCD();
+0181  20E8  	CALL limpiarLCD_00000
+
+	
+	char mensaje[]="ERROR EN CAMBIO";
+0182  3020  	MOVLW 0x20
+0183  00ED  	MOVWF mensajeErr_00021_1_mensaje+D'5'
+0184  00F0  	MOVWF mensajeErr_00021_1_mensaje+D'8'
+0185  3041  	MOVLW 0x41
+0186  00F2  	MOVWF mensajeErr_00021_1_mensaje+D'10'
+0187  3042  	MOVLW 0x42
+0188  00F4  	MOVWF mensajeErr_00021_1_mensaje+D'12'
+0189  3043  	MOVLW 0x43
+018A  00F1  	MOVWF mensajeErr_00021_1_mensaje+D'9'
+018B  3045  	MOVLW 0x45
+018C  00E8  	MOVWF mensajeErr_00021_1_mensaje
+018D  00EE  	MOVWF mensajeErr_00021_1_mensaje+D'6'
+018E  3049  	MOVLW 0x49
+018F  00F5  	MOVWF mensajeErr_00021_1_mensaje+D'13'
+0190  304D  	MOVLW 0x4D
+0191  00F3  	MOVWF mensajeErr_00021_1_mensaje+D'11'
+0192  304E  	MOVLW 0x4E
+0193  00EF  	MOVWF mensajeErr_00021_1_mensaje+D'7'
+0194  304F  	MOVLW 0x4F
+0195  00EB  	MOVWF mensajeErr_00021_1_mensaje+D'3'
+0196  00F6  	MOVWF mensajeErr_00021_1_mensaje+D'14'
+0197  3052  	MOVLW 0x52
+0198  00E9  	MOVWF mensajeErr_00021_1_mensaje+D'1'
+0199  00EA  	MOVWF mensajeErr_00021_1_mensaje+D'2'
+019A  00EC  	MOVWF mensajeErr_00021_1_mensaje+D'4'
+019B  01F7  	CLRF mensajeErr_00021_1_mensaje+D'15'
+
+	short posicio=128;
+019C  3080  	MOVLW 0x80
+019D  00F8  	MOVWF mensajeErr_00021_1_posicio
+019E  01F9  	CLRF mensajeErr_00021_1_posicio+D'1'
+
+	short i;
+	for(i=0; i<sizeof(mensaje); i++){
+019F  01FA  	CLRF mensajeErr_00021_1_i
+01A0  01FB  	CLRF mensajeErr_00021_1_i+D'1'
+01A1        label24
+01A1  3010  	MOVLW 0x10
+01A2  027A  	SUBWF mensajeErr_00021_1_i, W
+01A3  087B  	MOVF mensajeErr_00021_1_i+D'1', W
+01A4  1803  	BTFSC STATUS,C
+01A5  29A8  	GOTO	label25
+01A6  1903  	BTFSC STATUS,Z
+01A7  29AA  	GOTO	label26
+01A8        label25
+01A8  1FFB  	BTFSS mensajeErr_00021_1_i+D'1',7
+01A9  29C3  	GOTO	label27
+01AA        label26
+01BF  0AFA  	INCF mensajeErr_00021_1_i, F
+01C0  1903  	BTFSC STATUS,Z
+01C1  0AFB  	INCF mensajeErr_00021_1_i+D'1', F
+01C2  29A1  	GOTO	label24
+01C3        label27
+
+		instruccion(posicio);
+01AA  0878  	MOVF mensajeErr_00021_1_posicio, W
+01AB  1683  	BSF STATUS, RP0
+01AC  00CB  	MOVWF instruccio_00015_arg_comando
+01AD  1283  	BCF STATUS, RP0
+01AE  0879  	MOVF mensajeErr_00021_1_posicio+D'1', W
+01AF  1683  	BSF STATUS, RP0
+01B0  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+01B1  202B  	CALL instruccio_00015
+
+		escribirDato(mensaje[i]);
+01B2  1383  	BCF	STATUS,IRP
+01B3  3068  	MOVLW LOW(mensajeErr_00021_1_mensaje+D'0')
+01B4  0084  	MOVWF FSR
+01B5  087A  	MOVF mensajeErr_00021_1_i, W
+01B6  0784  	ADDWF FSR, F
+01B7  0800  	MOVF INDF, W
+01B8  1683  	BSF STATUS, RP0
+01B9  00CB  	MOVWF escribirDa_00016_arg_dato
+01BA  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+01BB  2036  	CALL escribirDa_00016
+
+		posicio++;
+01BC  0AF8  	INCF mensajeErr_00021_1_posicio, F
+01BD  1903  	BTFSC STATUS,Z
+01BE  0AF9  	INCF mensajeErr_00021_1_posicio+D'1', F
+
+	}
+	
+	
+	//Se reinicia el contador de intentos para no generar problemas de ingreso
+	contadorIntento=0;
+01C3  01C9  	CLRF gbl_contadorIntento
+01C4  01CA  	CLRF gbl_contadorIntento+D'1'
+
+}
+01C5  0008  	RETURN
+
+
+
+
+/**
+*Muestra por pantalla un mensaje indicando que la contrase?a es incorrecta
+*/
+void mensajeIncorrecto(){
+
+
+	char mensaje[]="INCORRECTO";
+0131  3043  	MOVLW 0x43
+0132  1283  	BCF STATUS, RP0
+0133  1303  	BCF STATUS, RP1
+0134  00EA  	MOVWF mensajeInc_00022_1_mensaje+D'2'
+0135  00EF  	MOVWF mensajeInc_00022_1_mensaje+D'7'
+0136  3045  	MOVLW 0x45
+0137  00EE  	MOVWF mensajeInc_00022_1_mensaje+D'6'
+0138  3049  	MOVLW 0x49
+0139  00E8  	MOVWF mensajeInc_00022_1_mensaje
+013A  304E  	MOVLW 0x4E
+013B  00E9  	MOVWF mensajeInc_00022_1_mensaje+D'1'
+013C  304F  	MOVLW 0x4F
+013D  00EB  	MOVWF mensajeInc_00022_1_mensaje+D'3'
+013E  00F1  	MOVWF mensajeInc_00022_1_mensaje+D'9'
+013F  3052  	MOVLW 0x52
+0140  00EC  	MOVWF mensajeInc_00022_1_mensaje+D'4'
+0141  00ED  	MOVWF mensajeInc_00022_1_mensaje+D'5'
+0142  3054  	MOVLW 0x54
+0143  00F0  	MOVWF mensajeInc_00022_1_mensaje+D'8'
+0144  01F2  	CLRF mensajeInc_00022_1_mensaje+D'10'
+
+
+	short posicio=128;
+0145  3080  	MOVLW 0x80
+0146  00F3  	MOVWF mensajeInc_00022_1_posicio
+0147  01F4  	CLRF mensajeInc_00022_1_posicio+D'1'
+
+
+	short i;
+	for(i=0; i<sizeof(mensaje); i++){
+0148  01F5  	CLRF mensajeInc_00022_1_i
+0149  01F6  	CLRF mensajeInc_00022_1_i+D'1'
+014A        label18
+014A  300B  	MOVLW 0x0B
+014B  0275  	SUBWF mensajeInc_00022_1_i, W
+014C  0876  	MOVF mensajeInc_00022_1_i+D'1', W
+014D  1803  	BTFSC STATUS,C
+014E  2951  	GOTO	label19
+014F  1903  	BTFSC STATUS,Z
+0150  2953  	GOTO	label20
+0151        label19
+0151  1FF6  	BTFSS mensajeInc_00022_1_i+D'1',7
+0152  296C  	GOTO	label21
+0153        label20
+0168  0AF5  	INCF mensajeInc_00022_1_i, F
+0169  1903  	BTFSC STATUS,Z
+016A  0AF6  	INCF mensajeInc_00022_1_i+D'1', F
+016B  294A  	GOTO	label18
+016C        label21
+
+		instruccion(posicio);
+0153  0873  	MOVF mensajeInc_00022_1_posicio, W
+0154  1683  	BSF STATUS, RP0
+0155  00CB  	MOVWF instruccio_00015_arg_comando
+0156  1283  	BCF STATUS, RP0
+0157  0874  	MOVF mensajeInc_00022_1_posicio+D'1', W
+0158  1683  	BSF STATUS, RP0
+0159  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+015A  202B  	CALL instruccio_00015
+
+		escribirDato(mensaje[i]);
+015B  1383  	BCF	STATUS,IRP
+015C  3068  	MOVLW LOW(mensajeInc_00022_1_mensaje+D'0')
+015D  0084  	MOVWF FSR
+015E  0875  	MOVF mensajeInc_00022_1_i, W
+015F  0784  	ADDWF FSR, F
+0160  0800  	MOVF INDF, W
+0161  1683  	BSF STATUS, RP0
+0162  00CB  	MOVWF escribirDa_00016_arg_dato
+0163  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+0164  2036  	CALL escribirDa_00016
+
+		posicio++;
+0165  0AF3  	INCF mensajeInc_00022_1_posicio, F
+0166  1903  	BTFSC STATUS,Z
+0167  0AF4  	INCF mensajeInc_00022_1_posicio+D'1', F
+
+	}
+	
+	//Si se exceden los intentos permitidos para ingreso de contrasena:
+	if(contadorIntento==3){
+016C  3003  	MOVLW 0x03
+016D  0649  	XORWF gbl_contadorIntento, W
+016E  1903  	BTFSC STATUS,Z
+016F  084A  	MOVF gbl_contadorIntento+D'1', W
+0170  1D03  	BTFSS STATUS,Z
+0171  2976  	GOTO	label22
+0176        label22
+
+		//genera la interrupción externa mostrando un mensaje y dejando la caja bloqueada:
+		mostrarMensajeBloqueoTerminal();
+0172  20A6  	CALL mostrarMen_00017
+
+		desactivarTransmisionSerial();
+0173  20F8  	CALL desactivar_00014
+
+		intcon.INTF=1;
+0174  148B  	BSF gbl_intcon,1
+
+		
+	}else{
+0175  297B  	GOTO	label23
+
+		//Incrementar el contador de intentos:
+		contadorIntento=contadorIntento+1;
+0176  08C9  	MOVF gbl_contadorIntento, F
+0177  08CA  	MOVF gbl_contadorIntento+D'1', F
+0178  0AC9  	INCF gbl_contadorIntento, F
+0179  1903  	BTFSC STATUS,Z
+017A  0ACA  	INCF gbl_contadorIntento+D'1', F
+017B        label23
+
+	}
+	
+	cont=128;
+017B  3080  	MOVLW 0x80
+017C  00C3  	MOVWF gbl_cont
+017D  01C4  	CLRF gbl_cont+D'1'
+
+	posicion=0;
+017E  01CB  	CLRF gbl_posicion
+017F  01CC  	CLRF gbl_posicion+D'1'
+
+
+}
+0180  0008  	RETURN
+
+//-------------------------------------------------------Validaciones----------------------------------------------------------
+
+/**
+*Vuelve a ceros la contrasena de el sistema para aplicar el cambio de contrasena:
+*/
+void reiniciarClave(){
+
+	int i;
+	for(i=0; i<sizeof(contrasena); i++){
+0119  1283  	BCF STATUS, RP0
+011A  1303  	BCF STATUS, RP1
+011B  01E8  	CLRF reiniciarC_00023_1_i
+011C  01E9  	CLRF reiniciarC_00023_1_i+D'1'
+011D        label15
+011D  3008  	MOVLW 0x08
+011E  0268  	SUBWF reiniciarC_00023_1_i, W
+011F  0869  	MOVF reiniciarC_00023_1_i+D'1', W
+0120  1803  	BTFSC STATUS,C
+0121  2924  	GOTO	label16
+0122  1903  	BTFSC STATUS,Z
+0123  2926  	GOTO	label17
+0124        label16
+0124  1FE9  	BTFSS reiniciarC_00023_1_i+D'1',7
+012D  0AE8  	INCF reiniciarC_00023_1_i, F
+012E  1903  	BTFSC STATUS,Z
+012F  0AE9  	INCF reiniciarC_00023_1_i+D'1', F
+0130  291D  	GOTO	label15
+
+		contrasena[i]=0;
+0126  1383  	BCF	STATUS,IRP
+0127  3020  	MOVLW LOW(gbl_contrasena+D'0')
+0128  0084  	MOVWF FSR
+0129  0868  	MOVF reiniciarC_00023_1_i, W
+012A  0784  	ADDWF FSR, F
+012B  3000  	MOVLW 0x00
+012C  0080  	MOVWF INDF
+
+	}
+}
+0125  0008  	RETURN
+0126        label17
+
+
+void reiniciarClaveIngresada(){
+
+	int i;
+	for(i=0; i<sizeof(contrasenaIngresada); i++){
+0101  1283  	BCF STATUS, RP0
+0102  1303  	BCF STATUS, RP1
+0103  01E8  	CLRF reiniciarC_00024_1_i
+0104  01E9  	CLRF reiniciarC_00024_1_i+D'1'
+0105        label12
+0105  3008  	MOVLW 0x08
+0106  0268  	SUBWF reiniciarC_00024_1_i, W
+0107  0869  	MOVF reiniciarC_00024_1_i+D'1', W
+0108  1803  	BTFSC STATUS,C
+0109  290C  	GOTO	label13
+010A  1903  	BTFSC STATUS,Z
+010B  290E  	GOTO	label14
+010C        label13
+010C  1FE9  	BTFSS reiniciarC_00024_1_i+D'1',7
+0115  0AE8  	INCF reiniciarC_00024_1_i, F
+0116  1903  	BTFSC STATUS,Z
+0117  0AE9  	INCF reiniciarC_00024_1_i+D'1', F
+0118  2905  	GOTO	label12
+
+		contrasenaIngresada[i]=0;
+010E  1383  	BCF	STATUS,IRP
+010F  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0110  0084  	MOVWF FSR
+0111  0868  	MOVF reiniciarC_00024_1_i, W
+0112  0784  	ADDWF FSR, F
+0113  3000  	MOVLW 0x00
+0114  0080  	MOVWF INDF
+
+	}
+}
+010D  0008  	RETURN
+010E        label14
+
+
+
+/**
+*Valida si la contraseña ingresada por el usuario es correcta
+*/
+void validarContrasena(){
+
+
+	bool condicion=true;
+0203  1283  	BCF STATUS, RP0
+0204  1303  	BCF STATUS, RP1
+0205  1465  	BSF validarCon_00025_1_condicion,0
+
+	int i;
+	for(i=0; i<sizeof(contrasena); i++){
+0206  01E6  	CLRF validarCon_00025_1_i
+0207  01E7  	CLRF validarCon_00025_1_i+D'1'
+0208        label32
+0208  3008  	MOVLW 0x08
+0209  0266  	SUBWF validarCon_00025_1_i, W
+020A  0867  	MOVF validarCon_00025_1_i+D'1', W
+020B  1803  	BTFSC STATUS,C
+020C  2A0F  	GOTO	label33
+020D  1903  	BTFSC STATUS,Z
+020E  2A11  	GOTO	label34
+020F        label33
+020F  1FE7  	BTFSS validarCon_00025_1_i+D'1',7
+0210  2A29  	GOTO	label36
+0211        label34
+0225  0AE6  	INCF validarCon_00025_1_i, F
+0226  1903  	BTFSC STATUS,Z
+0227  0AE7  	INCF validarCon_00025_1_i+D'1', F
+0228  2A08  	GOTO	label32
+0229        label36
+
+		if(contrasenaIngresada[i]!=contrasena[i]){
+0211  1383  	BCF	STATUS,IRP
+0212  3020  	MOVLW LOW(gbl_contrasena+D'0')
+0213  0084  	MOVWF FSR
+0214  0866  	MOVF validarCon_00025_1_i, W
+0215  00E8  	MOVWF CompTempVar600
+0216  0868  	MOVF CompTempVar600, W
+0217  0784  	ADDWF FSR, F
+0218  0800  	MOVF INDF, W
+0219  00E9  	MOVWF CompTempVar601
+021A  1383  	BCF	STATUS,IRP
+021B  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+021C  0084  	MOVWF FSR
+021D  0866  	MOVF validarCon_00025_1_i, W
+021E  0784  	ADDWF FSR, F
+021F  0869  	MOVF CompTempVar601, W
+0220  0600  	XORWF INDF, W
+0221  1903  	BTFSC STATUS,Z
+0222  2A25  	GOTO	label35
+0225        label35
+
+			condicion=false;
+0223  1065  	BCF validarCon_00025_1_condicion,0
+
+			break;
+0224  2A29  	GOTO	label36
+
+		}
+	}
+	
+	limpiarLCD();
+0229  20E8  	CALL limpiarLCD_00000
+
+	//si la contrasena es correcta:
+	if(condicion==true){
+022A  1C65  	BTFSS validarCon_00025_1_condicion,0
+022B  2A35  	GOTO	label37
+0235        label37
+
+		//envie un mensaje de bienvenida
+		mensajeCorrecto();
+022C  2043  	CALL mensajeCor_0001F
+
+		instruccion(15);
+022D  300F  	MOVLW 0x0F
+022E  1683  	BSF STATUS, RP0
+022F  00CB  	MOVWF instruccio_00015_arg_comando
+0230  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0231  202B  	CALL instruccio_00015
+
+		//active la bandera de desbloqueo:
+		desbloqueado=true;
+0232  144D  	BSF gbl_desbloqueado,0
+
+		//se activa la bandera que permite realizar modificacion de contrasena (solo valido cuando se pulsa la letra A):
+		bandera_modificar=true;
+0233  15CD  	BSF gbl_bandera_modificar,3
+
+					
+	}else{
+0234  2A3B  	GOTO	label38
+023B        label38
+
+		mensajeIncorrecto();
+0235  2131  	CALL mensajeInc_00022
+
+		instruccion(15);
+0236  300F  	MOVLW 0x0F
+0237  1683  	BSF STATUS, RP0
+0238  00CB  	MOVWF instruccio_00015_arg_comando
+0239  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+023A  202B  	CALL instruccio_00015
+
+	}
+	//se limpia el vector ingresado anteriormente por motivos de seguridad:
+	reiniciarClaveIngresada();
+023B  2101  	CALL reiniciarC_00024
+
+	posicion=0;
+023C  01CB  	CLRF gbl_posicion
+023D  01CC  	CLRF gbl_posicion+D'1'
+
+	delay_s(2);
+023E  3002  	MOVLW 0x02
+023F  00F6  	MOVWF delay_s_00000_arg_del
+0240  201C  	CALL delay_s_00000
+
+	instruccion(1);
+0241  3001  	MOVLW 0x01
+0242  1683  	BSF STATUS, RP0
+0243  00CB  	MOVWF instruccio_00015_arg_comando
+0244  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0245  202B  	CALL instruccio_00015
+
+}
+0246  0008  	RETURN
+
+
+
+/**
+*Modulo que realiza las validaciones, y en caso de estar todo ok, aplica el cambio de contrasena
+*/
+void cambiarClave(){
+
+	//primero se valida que las claves, tengan igual longitud:
+	if(posicion_nueva_contra == posicion_confirmar_contra){
+0349  1283  	BCF STATUS, RP0
+034A  1303  	BCF STATUS, RP1
+034B  0847  	MOVF gbl_posicion_confirmar_contra, W
+034C  0645  	XORWF gbl_posicion_nueva_contra, W
+034D  1D03  	BTFSS STATUS,Z
+034E  2BB5  	GOTO	label66
+034F  0848  	MOVF gbl_posicion_confirmar_contra+D'1', W
+0350  0646  	XORWF gbl_posicion_nueva_contra+D'1', W
+0351  1D03  	BTFSS STATUS,Z
+0352  2BB5  	GOTO	label66
+03B5        label66
+
+		
+		//luego, se valida que la clave tenga una longitud entre 4 y 8:
+		if(posicion_nueva_contra>=4 && posicion_nueva_contra<=8){
+0353  0846  	MOVF gbl_posicion_nueva_contra+D'1', W
+0354  3A80  	XORLW 0x80
+0355  00E5  	MOVWF CompTempVar602
+0356  3080  	MOVLW 0x80
+0357  0265  	SUBWF CompTempVar602, W
+0358  1D03  	BTFSS STATUS,Z
+0359  2B5C  	GOTO	label54
+035A  3004  	MOVLW 0x04
+035B  0245  	SUBWF gbl_posicion_nueva_contra, W
+035C        label54
+035C  1C03  	BTFSS STATUS,C
+035D  2BB3  	GOTO	label65
+035E  3080  	MOVLW 0x80
+035F  00E5  	MOVWF CompTempVar603
+0360  0846  	MOVF gbl_posicion_nueva_contra+D'1', W
+0361  3A80  	XORLW 0x80
+0362  0265  	SUBWF CompTempVar603, W
+0363  0845  	MOVF gbl_posicion_nueva_contra, W
+0364  08C6  	MOVF gbl_posicion_nueva_contra+D'1', F
+0365  1903  	BTFSC STATUS,Z
+0366  3C08  	SUBLW 0x08
+0367  1C03  	BTFSS STATUS,C
+0368  2BB3  	GOTO	label65
+03B3        label65
+
+			bool condicion=true;
+0369  1465  	BSF cambiarCla_00026_5_condicion,0
+
+			int i;
+			for(i=0; i<sizeof(nuevaContrasena); i++){
+036A  01E6  	CLRF cambiarCla_00026_5_i
+036B  01E7  	CLRF cambiarCla_00026_5_i+D'1'
+036C        label55
+036C  3008  	MOVLW 0x08
+036D  0266  	SUBWF cambiarCla_00026_5_i, W
+036E  0867  	MOVF cambiarCla_00026_5_i+D'1', W
+036F  1803  	BTFSC STATUS,C
+0370  2B73  	GOTO	label56
+0371  1903  	BTFSC STATUS,Z
+0372  2B75  	GOTO	label57
+0373        label56
+0373  1FE7  	BTFSS cambiarCla_00026_5_i+D'1',7
+0374  2B8D  	GOTO	label59
+0375        label57
+0389  0AE6  	INCF cambiarCla_00026_5_i, F
+038A  1903  	BTFSC STATUS,Z
+038B  0AE7  	INCF cambiarCla_00026_5_i+D'1', F
+038C  2B6C  	GOTO	label55
+038D        label59
+
+				if(nuevaContrasena[i]!=claveConfirmar[i]){
+0375  1383  	BCF	STATUS,IRP
+0376  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0377  0084  	MOVWF FSR
+0378  0866  	MOVF cambiarCla_00026_5_i, W
+0379  00E8  	MOVWF CompTempVar606
+037A  0868  	MOVF CompTempVar606, W
+037B  0784  	ADDWF FSR, F
+037C  0800  	MOVF INDF, W
+037D  00E9  	MOVWF CompTempVar607
+037E  1383  	BCF	STATUS,IRP
+037F  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+0380  0084  	MOVWF FSR
+0381  0866  	MOVF cambiarCla_00026_5_i, W
+0382  0784  	ADDWF FSR, F
+0383  0869  	MOVF CompTempVar607, W
+0384  0600  	XORWF INDF, W
+0385  1903  	BTFSC STATUS,Z
+0386  2B89  	GOTO	label58
+0389        label58
+
+					condicion=false;
+0387  1065  	BCF cambiarCla_00026_5_condicion,0
+
+					break;
+0388  2B8D  	GOTO	label59
+
+				}
+			}
+			
+			//si ambas contrasenas coinciden, ejecute el cambio de contrasena:
+			if(condicion==true){
+038D  1C65  	BTFSS cambiarCla_00026_5_condicion,0
+038E  2BB1  	GOTO	label64
+03B1        label64
+
+				reiniciarClave();
+038F  2119  	CALL reiniciarC_00023
+
+				for(i=0; i<sizeof(nuevaContrasena); i++){
+0390  01E6  	CLRF cambiarCla_00026_5_i
+0391  01E7  	CLRF cambiarCla_00026_5_i+D'1'
+0392        label60
+0392  3008  	MOVLW 0x08
+0393  0266  	SUBWF cambiarCla_00026_5_i, W
+0394  0867  	MOVF cambiarCla_00026_5_i+D'1', W
+0395  1803  	BTFSC STATUS,C
+0396  2B99  	GOTO	label61
+0397  1903  	BTFSC STATUS,Z
+0398  2B9B  	GOTO	label62
+0399        label61
+0399  1FE7  	BTFSS cambiarCla_00026_5_i+D'1',7
+039A  2BAF  	GOTO	label63
+039B        label62
+03AB  0AE6  	INCF cambiarCla_00026_5_i, F
+03AC  1903  	BTFSC STATUS,Z
+03AD  0AE7  	INCF cambiarCla_00026_5_i+D'1', F
+03AE  2B92  	GOTO	label60
+03AF        label63
+
+					contrasena[i]=nuevaContrasena[i];
+039B  1383  	BCF	STATUS,IRP
+039C  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+039D  0084  	MOVWF FSR
+039E  0866  	MOVF cambiarCla_00026_5_i, W
+039F  00E8  	MOVWF CompTempVar610
+03A0  0868  	MOVF CompTempVar610, W
+03A1  0784  	ADDWF FSR, F
+03A2  0800  	MOVF INDF, W
+03A3  00E9  	MOVWF CompTempVar611
+03A4  1383  	BCF	STATUS,IRP
+03A5  3020  	MOVLW LOW(gbl_contrasena+D'0')
+03A6  0084  	MOVWF FSR
+03A7  0866  	MOVF cambiarCla_00026_5_i, W
+03A8  0784  	ADDWF FSR, F
+03A9  0869  	MOVF CompTempVar611, W
+03AA  0080  	MOVWF INDF
+
+					
+				}
+				
+				mensajeCambioContrasena();
+03AF  21C6  	CALL mensajeCam_00020
+
+						
+			}else{
+03B0  2BB6  	GOTO	label67
+
+				//si ingresa aqui es porque las dos contrasenas no coincidieron:
+				mensajeErrorCambio();
+03B1  2181  	CALL mensajeErr_00021
+
+			}
+			
+		}else{
+03B2  2BB6  	GOTO	label67
+
+		
+			//si ingresa aqui es porque las dos contrasenas no coincidieron:
+			mensajeErrorCambio();
+03B3  2181  	CALL mensajeErr_00021
+
+		
+		}
+		
+	}else{
+03B4  2BB6  	GOTO	label67
+03B6        label67
+
+	
+		mensajeErrorCambio();
+03B5  2181  	CALL mensajeErr_00021
+
+	}
+	//se reinician los valores para evitar errores:
+	bandera_configuracion=false;
+03B6  10CD  	BCF gbl_bandera_configuracion,1
+
+	bandera_confirmacion_cambio=false;
+03B7  114D  	BCF gbl_bandera_confirmacion_cambio,2
+
+	posicion_confirmar_contra=0;
+03B8  01C7  	CLRF gbl_posicion_confirmar_contra
+03B9  01C8  	CLRF gbl_posicion_confirmar_contra+D'1'
+
+	posicion_nueva_contra=0;
+03BA  01C5  	CLRF gbl_posicion_nueva_contra
+03BB  01C6  	CLRF gbl_posicion_nueva_contra+D'1'
+
+	delay_s(1);
+03BC  3001  	MOVLW 0x01
+03BD  00F6  	MOVWF delay_s_00000_arg_del
+03BE  201C  	CALL delay_s_00000
+
+
+}
+03BF  0008  	RETURN
+
+
+//--------------------------------------------------------------Zona De Interrupciones--------------------------------------------------
+
+/**
+*Cuando se preciona una tecla se genera la interrupción 
+*Mostrando el número ingresado por pantalla.
+*/
+void interrupt(void){
+
+
+	//se valida que la caja no se encuentre apagada
+	if(portb.1==0){
+04AA  1283  	BCF STATUS, RP0
+04AB  1303  	BCF STATUS, RP1
+04AC  1886  	BTFSC gbl_portb,1
+04AD  2FE9  	GOTO	label128
+
+		if(cont==128){
+04AE  3080  	MOVLW 0x80
+04AF  0643  	XORWF gbl_cont, W
+04B0  1903  	BTFSC STATUS,Z
+04B1  0844  	MOVF gbl_cont+D'1', W
+04B2  1903  	BTFSC STATUS,Z
+
+			limpiarLCD();
+04B3  20E8  	CALL limpiarLCD_00000
+
+		}
+		//Eliminar la restriccion por intentos excedidos: Esto ocurre cuando se inserta la llave de seguridad:
+		if(intcon.INTF==1 && portb.0==1){
+04B4  1C8B  	BTFSS gbl_intcon,1
+04B5  2CC1  	GOTO	label80
+04B6  1C06  	BTFSS gbl_portb,0
+04B7  2CC1  	GOTO	label80
+04C1        label80
+
+			mostrarMensajeDesbloqueoTerminal();
+04B8  2309  	CALL mostrarMen_00019
+
+			desactivarTransmisionSerial();
+04B9  20F8  	CALL desactivar_00014
+
+			//se Limpia la pantalla:
+			limpiarLCD();
+04BA  20E8  	CALL limpiarLCD_00000
+
+			//se reinicia el contador de contraseña:
+			contadorIntento=1;
+04BB  3001  	MOVLW 0x01
+04BC  00C9  	MOVWF gbl_contadorIntento
+04BD  01CA  	CLRF gbl_contadorIntento+D'1'
+
+			intcon.GIE=1;
+04BE  178B  	BSF gbl_intcon,7
+
+			//se desactiva la bandera de interrupci?n externa para permitir la escritura por teclado:
+			intcon.INTF=0;
+04BF  108B  	BCF gbl_intcon,1
+
+			
+					
+		//Si se activa la interrupción externa generada por software, genere un mensaje de error impidiendo al usuario manipular la caja:
+		}else if(intcon.INTF==1 && portb.0==0){
+04C0  2FE9  	GOTO	label128
+04C1  1C8B  	BTFSS gbl_intcon,1
+04C2  2CC7  	GOTO	label81
+04C3  1806  	BTFSC gbl_portb,0
+04C4  2CC7  	GOTO	label81
+04C7        label81
+
+		
+			mostrarMensajeBloqueo();
+04C5  22C8  	CALL mostrarMen_0001C
+
+			
+		}else{
+04C6  2FE9  	GOTO	label128
+07E9        label128
+
+		
+			//primero, se lee el puerto B:
+			int a = porta;
+04C7  0805  	MOVF gbl_porta, W
+04C8  00E1  	MOVWF interrupt_19_a
+04C9  01E2  	CLRF interrupt_19_a+D'1'
+
+			int b=portb;
+04CA  0806  	MOVF gbl_portb, W
+04CB  00E3  	MOVWF interrupt_19_b
+04CC  01E4  	CLRF interrupt_19_b+D'1'
+
+			
+			//Luego se reinicia la bandera
+			intcon.RBIF=0;
+04CD  100B  	BCF gbl_intcon,0
+
+			
+			if(a==14 && b==224){
+04CE  300E  	MOVLW 0x0E
+04CF  0661  	XORWF interrupt_19_a, W
+04D0  1903  	BTFSC STATUS,Z
+04D1  0862  	MOVF interrupt_19_a+D'1', W
+04D2  1D03  	BTFSS STATUS,Z
+04D3  2D14  	GOTO	label85
+04D4  30E0  	MOVLW 0xE0
+04D5  0663  	XORWF interrupt_19_b, W
+04D6  1903  	BTFSC STATUS,Z
+04D7  0864  	MOVF interrupt_19_b+D'1', W
+04D8  1D03  	BTFSS STATUS,Z
+04D9  2D14  	GOTO	label85
+0514        label85
+
+					instruccion(cont);
+04DA  0843  	MOVF gbl_cont, W
+04DB  1683  	BSF STATUS, RP0
+04DC  00CB  	MOVWF instruccio_00015_arg_comando
+04DD  1283  	BCF STATUS, RP0
+04DE  0844  	MOVF gbl_cont+D'1', W
+04DF  1683  	BSF STATUS, RP0
+04E0  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+04E1  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('7');
+04E2  3037  	MOVLW 0x37
+04E3  1683  	BSF STATUS, RP0
+04E4  00CB  	MOVWF escribirDa_00016_arg_dato
+04E5  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+04E6  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+04E7  300F  	MOVLW 0x0F
+04E8  1683  	BSF STATUS, RP0
+04E9  00CB  	MOVWF instruccio_00015_arg_comando
+04EA  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+04EB  202B  	CALL instruccio_00015
+
+					
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+04EC  1CCD  	BTFSS gbl_bandera_configuracion,1
+04ED  2D06  	GOTO	label83
+0506        label83
+
+						if(bandera_confirmacion_cambio==true){
+04EE  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+04EF  2CFB  	GOTO	label82
+04FB        label82
+
+							claveConfirmar[posicion_confirmar_contra]='7';
+04F0  1383  	BCF	STATUS,IRP
+04F1  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+04F2  0084  	MOVWF FSR
+04F3  0847  	MOVF gbl_posicion_confirmar_contra, W
+04F4  0784  	ADDWF FSR, F
+04F5  3037  	MOVLW 0x37
+04F6  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+04F7  0AC7  	INCF gbl_posicion_confirmar_contra, F
+04F8  1903  	BTFSC STATUS,Z
+04F9  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+04FA  2D10  	GOTO	label84
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='7';			
+04FB  1383  	BCF	STATUS,IRP
+04FC  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+04FD  0084  	MOVWF FSR
+04FE  0845  	MOVF gbl_posicion_nueva_contra, W
+04FF  0784  	ADDWF FSR, F
+0500  3037  	MOVLW 0x37
+0501  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+0502  0AC5  	INCF gbl_posicion_nueva_contra, F
+0503  1903  	BTFSC STATUS,Z
+0504  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+0505  2D10  	GOTO	label84
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='7';			
+0506  1383  	BCF	STATUS,IRP
+0507  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0508  0084  	MOVWF FSR
+0509  084B  	MOVF gbl_posicion, W
+050A  0784  	ADDWF FSR, F
+050B  3037  	MOVLW 0x37
+050C  0080  	MOVWF INDF
+
+						posicion++;
+050D  0ACB  	INCF gbl_posicion, F
+050E  1903  	BTFSC STATUS,Z
+050F  0ACC  	INCF gbl_posicion+D'1', F
+0510        label84
+
+						
+					}
+					cont++;
+0510  0AC3  	INCF gbl_cont, F
+0511  1903  	BTFSC STATUS,Z
+0512  0AC4  	INCF gbl_cont+D'1', F
+
+					
+			}else if(a==14 && b==208){
+0513  2FE8  	GOTO	label127
+0514  300E  	MOVLW 0x0E
+0515  0661  	XORWF interrupt_19_a, W
+0516  1903  	BTFSC STATUS,Z
+0517  0862  	MOVF interrupt_19_a+D'1', W
+0518  1D03  	BTFSS STATUS,Z
+0519  2D5A  	GOTO	label89
+051A  30D0  	MOVLW 0xD0
+051B  0663  	XORWF interrupt_19_b, W
+051C  1903  	BTFSC STATUS,Z
+051D  0864  	MOVF interrupt_19_b+D'1', W
+051E  1D03  	BTFSS STATUS,Z
+051F  2D5A  	GOTO	label89
+055A        label89
+
+					instruccion(cont);
+0520  0843  	MOVF gbl_cont, W
+0521  1683  	BSF STATUS, RP0
+0522  00CB  	MOVWF instruccio_00015_arg_comando
+0523  1283  	BCF STATUS, RP0
+0524  0844  	MOVF gbl_cont+D'1', W
+0525  1683  	BSF STATUS, RP0
+0526  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0527  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('8');
+0528  3038  	MOVLW 0x38
+0529  1683  	BSF STATUS, RP0
+052A  00CB  	MOVWF escribirDa_00016_arg_dato
+052B  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+052C  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+052D  300F  	MOVLW 0x0F
+052E  1683  	BSF STATUS, RP0
+052F  00CB  	MOVWF instruccio_00015_arg_comando
+0530  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0531  202B  	CALL instruccio_00015
+
+		
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+0532  1CCD  	BTFSS gbl_bandera_configuracion,1
+0533  2D4C  	GOTO	label87
+054C        label87
+
+						if(bandera_confirmacion_cambio==true){
+0534  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+0535  2D41  	GOTO	label86
+0541        label86
+
+							claveConfirmar[posicion_confirmar_contra]='8';
+0536  1383  	BCF	STATUS,IRP
+0537  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0538  0084  	MOVWF FSR
+0539  0847  	MOVF gbl_posicion_confirmar_contra, W
+053A  0784  	ADDWF FSR, F
+053B  3038  	MOVLW 0x38
+053C  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+053D  0AC7  	INCF gbl_posicion_confirmar_contra, F
+053E  1903  	BTFSC STATUS,Z
+053F  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+0540  2D56  	GOTO	label88
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='8';			
+0541  1383  	BCF	STATUS,IRP
+0542  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+0543  0084  	MOVWF FSR
+0544  0845  	MOVF gbl_posicion_nueva_contra, W
+0545  0784  	ADDWF FSR, F
+0546  3038  	MOVLW 0x38
+0547  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+0548  0AC5  	INCF gbl_posicion_nueva_contra, F
+0549  1903  	BTFSC STATUS,Z
+054A  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+054B  2D56  	GOTO	label88
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='8';			
+054C  1383  	BCF	STATUS,IRP
+054D  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+054E  0084  	MOVWF FSR
+054F  084B  	MOVF gbl_posicion, W
+0550  0784  	ADDWF FSR, F
+0551  3038  	MOVLW 0x38
+0552  0080  	MOVWF INDF
+
+						posicion++;
+0553  0ACB  	INCF gbl_posicion, F
+0554  1903  	BTFSC STATUS,Z
+0555  0ACC  	INCF gbl_posicion+D'1', F
+0556        label88
+
+						
+					}
+					cont++;
+0556  0AC3  	INCF gbl_cont, F
+0557  1903  	BTFSC STATUS,Z
+0558  0AC4  	INCF gbl_cont+D'1', F
+
+	
+			}else if(a==14 && b==176){
+0559  2FE8  	GOTO	label127
+055A  300E  	MOVLW 0x0E
+055B  0661  	XORWF interrupt_19_a, W
+055C  1903  	BTFSC STATUS,Z
+055D  0862  	MOVF interrupt_19_a+D'1', W
+055E  1D03  	BTFSS STATUS,Z
+055F  2DA0  	GOTO	label93
+0560  30B0  	MOVLW 0xB0
+0561  0663  	XORWF interrupt_19_b, W
+0562  1903  	BTFSC STATUS,Z
+0563  0864  	MOVF interrupt_19_b+D'1', W
+0564  1D03  	BTFSS STATUS,Z
+0565  2DA0  	GOTO	label93
+05A0        label93
+
+					instruccion(cont);
+0566  0843  	MOVF gbl_cont, W
+0567  1683  	BSF STATUS, RP0
+0568  00CB  	MOVWF instruccio_00015_arg_comando
+0569  1283  	BCF STATUS, RP0
+056A  0844  	MOVF gbl_cont+D'1', W
+056B  1683  	BSF STATUS, RP0
+056C  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+056D  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('9');
+056E  3039  	MOVLW 0x39
+056F  1683  	BSF STATUS, RP0
+0570  00CB  	MOVWF escribirDa_00016_arg_dato
+0571  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+0572  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+0573  300F  	MOVLW 0x0F
+0574  1683  	BSF STATUS, RP0
+0575  00CB  	MOVWF instruccio_00015_arg_comando
+0576  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0577  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+0578  1CCD  	BTFSS gbl_bandera_configuracion,1
+0579  2D92  	GOTO	label91
+0592        label91
+
+						if(bandera_confirmacion_cambio==true){
+057A  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+057B  2D87  	GOTO	label90
+0587        label90
+
+							claveConfirmar[posicion_confirmar_contra]='9';
+057C  1383  	BCF	STATUS,IRP
+057D  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+057E  0084  	MOVWF FSR
+057F  0847  	MOVF gbl_posicion_confirmar_contra, W
+0580  0784  	ADDWF FSR, F
+0581  3039  	MOVLW 0x39
+0582  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+0583  0AC7  	INCF gbl_posicion_confirmar_contra, F
+0584  1903  	BTFSC STATUS,Z
+0585  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+0586  2D9C  	GOTO	label92
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='9';			
+0587  1383  	BCF	STATUS,IRP
+0588  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+0589  0084  	MOVWF FSR
+058A  0845  	MOVF gbl_posicion_nueva_contra, W
+058B  0784  	ADDWF FSR, F
+058C  3039  	MOVLW 0x39
+058D  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+058E  0AC5  	INCF gbl_posicion_nueva_contra, F
+058F  1903  	BTFSC STATUS,Z
+0590  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+0591  2D9C  	GOTO	label92
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='9';
+0592  1383  	BCF	STATUS,IRP
+0593  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0594  0084  	MOVWF FSR
+0595  084B  	MOVF gbl_posicion, W
+0596  0784  	ADDWF FSR, F
+0597  3039  	MOVLW 0x39
+0598  0080  	MOVWF INDF
+
+						posicion++;
+0599  0ACB  	INCF gbl_posicion, F
+059A  1903  	BTFSC STATUS,Z
+059B  0ACC  	INCF gbl_posicion+D'1', F
+059C        label92
+
+						
+					}
+					cont++;
+059C  0AC3  	INCF gbl_cont, F
+059D  1903  	BTFSC STATUS,Z
+059E  0AC4  	INCF gbl_cont+D'1', F
+
+					
+					
+			}else if(a==13 && b==224){
+059F  2FE8  	GOTO	label127
+05A0  300D  	MOVLW 0x0D
+05A1  0661  	XORWF interrupt_19_a, W
+05A2  1903  	BTFSC STATUS,Z
+05A3  0862  	MOVF interrupt_19_a+D'1', W
+05A4  1D03  	BTFSS STATUS,Z
+05A5  2DE6  	GOTO	label97
+05A6  30E0  	MOVLW 0xE0
+05A7  0663  	XORWF interrupt_19_b, W
+05A8  1903  	BTFSC STATUS,Z
+05A9  0864  	MOVF interrupt_19_b+D'1', W
+05AA  1D03  	BTFSS STATUS,Z
+05AB  2DE6  	GOTO	label97
+05E6        label97
+
+					instruccion(cont);
+05AC  0843  	MOVF gbl_cont, W
+05AD  1683  	BSF STATUS, RP0
+05AE  00CB  	MOVWF instruccio_00015_arg_comando
+05AF  1283  	BCF STATUS, RP0
+05B0  0844  	MOVF gbl_cont+D'1', W
+05B1  1683  	BSF STATUS, RP0
+05B2  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+05B3  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('4');
+05B4  3034  	MOVLW 0x34
+05B5  1683  	BSF STATUS, RP0
+05B6  00CB  	MOVWF escribirDa_00016_arg_dato
+05B7  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+05B8  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+05B9  300F  	MOVLW 0x0F
+05BA  1683  	BSF STATUS, RP0
+05BB  00CB  	MOVWF instruccio_00015_arg_comando
+05BC  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+05BD  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+05BE  1CCD  	BTFSS gbl_bandera_configuracion,1
+05BF  2DD8  	GOTO	label95
+05D8        label95
+
+						if(bandera_confirmacion_cambio==true){
+05C0  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+05C1  2DCD  	GOTO	label94
+05CD        label94
+
+							claveConfirmar[posicion_confirmar_contra]='4';
+05C2  1383  	BCF	STATUS,IRP
+05C3  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+05C4  0084  	MOVWF FSR
+05C5  0847  	MOVF gbl_posicion_confirmar_contra, W
+05C6  0784  	ADDWF FSR, F
+05C7  3034  	MOVLW 0x34
+05C8  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+05C9  0AC7  	INCF gbl_posicion_confirmar_contra, F
+05CA  1903  	BTFSC STATUS,Z
+05CB  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+05CC  2DE2  	GOTO	label96
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='4';			
+05CD  1383  	BCF	STATUS,IRP
+05CE  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+05CF  0084  	MOVWF FSR
+05D0  0845  	MOVF gbl_posicion_nueva_contra, W
+05D1  0784  	ADDWF FSR, F
+05D2  3034  	MOVLW 0x34
+05D3  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+05D4  0AC5  	INCF gbl_posicion_nueva_contra, F
+05D5  1903  	BTFSC STATUS,Z
+05D6  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+05D7  2DE2  	GOTO	label96
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='4';
+05D8  1383  	BCF	STATUS,IRP
+05D9  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+05DA  0084  	MOVWF FSR
+05DB  084B  	MOVF gbl_posicion, W
+05DC  0784  	ADDWF FSR, F
+05DD  3034  	MOVLW 0x34
+05DE  0080  	MOVWF INDF
+
+						posicion++;
+05DF  0ACB  	INCF gbl_posicion, F
+05E0  1903  	BTFSC STATUS,Z
+05E1  0ACC  	INCF gbl_posicion+D'1', F
+05E2        label96
+
+						
+					}
+					cont++;
+05E2  0AC3  	INCF gbl_cont, F
+05E3  1903  	BTFSC STATUS,Z
+05E4  0AC4  	INCF gbl_cont+D'1', F
+
+					
+			}else if(a==13 && b==208){
+05E5  2FE8  	GOTO	label127
+05E6  300D  	MOVLW 0x0D
+05E7  0661  	XORWF interrupt_19_a, W
+05E8  1903  	BTFSC STATUS,Z
+05E9  0862  	MOVF interrupt_19_a+D'1', W
+05EA  1D03  	BTFSS STATUS,Z
+05EB  2E2C  	GOTO	label101
+05EC  30D0  	MOVLW 0xD0
+05ED  0663  	XORWF interrupt_19_b, W
+05EE  1903  	BTFSC STATUS,Z
+05EF  0864  	MOVF interrupt_19_b+D'1', W
+05F0  1D03  	BTFSS STATUS,Z
+05F1  2E2C  	GOTO	label101
+062C        label101
+
+					instruccion(cont);
+05F2  0843  	MOVF gbl_cont, W
+05F3  1683  	BSF STATUS, RP0
+05F4  00CB  	MOVWF instruccio_00015_arg_comando
+05F5  1283  	BCF STATUS, RP0
+05F6  0844  	MOVF gbl_cont+D'1', W
+05F7  1683  	BSF STATUS, RP0
+05F8  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+05F9  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('5');
+05FA  3035  	MOVLW 0x35
+05FB  1683  	BSF STATUS, RP0
+05FC  00CB  	MOVWF escribirDa_00016_arg_dato
+05FD  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+05FE  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+05FF  300F  	MOVLW 0x0F
+0600  1683  	BSF STATUS, RP0
+0601  00CB  	MOVWF instruccio_00015_arg_comando
+0602  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0603  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+0604  1CCD  	BTFSS gbl_bandera_configuracion,1
+0605  2E1E  	GOTO	label99
+061E        label99
+
+						if(bandera_confirmacion_cambio==true){
+0606  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+0607  2E13  	GOTO	label98
+0613        label98
+
+							claveConfirmar[posicion_confirmar_contra]='5';
+0608  1383  	BCF	STATUS,IRP
+0609  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+060A  0084  	MOVWF FSR
+060B  0847  	MOVF gbl_posicion_confirmar_contra, W
+060C  0784  	ADDWF FSR, F
+060D  3035  	MOVLW 0x35
+060E  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+060F  0AC7  	INCF gbl_posicion_confirmar_contra, F
+0610  1903  	BTFSC STATUS,Z
+0611  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+0612  2E28  	GOTO	label100
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='5';			
+0613  1383  	BCF	STATUS,IRP
+0614  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+0615  0084  	MOVWF FSR
+0616  0845  	MOVF gbl_posicion_nueva_contra, W
+0617  0784  	ADDWF FSR, F
+0618  3035  	MOVLW 0x35
+0619  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+061A  0AC5  	INCF gbl_posicion_nueva_contra, F
+061B  1903  	BTFSC STATUS,Z
+061C  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+061D  2E28  	GOTO	label100
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='5';
+061E  1383  	BCF	STATUS,IRP
+061F  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0620  0084  	MOVWF FSR
+0621  084B  	MOVF gbl_posicion, W
+0622  0784  	ADDWF FSR, F
+0623  3035  	MOVLW 0x35
+0624  0080  	MOVWF INDF
+
+						posicion++;
+0625  0ACB  	INCF gbl_posicion, F
+0626  1903  	BTFSC STATUS,Z
+0627  0ACC  	INCF gbl_posicion+D'1', F
+0628        label100
+
+						
+					}
+					cont++;
+0628  0AC3  	INCF gbl_cont, F
+0629  1903  	BTFSC STATUS,Z
+062A  0AC4  	INCF gbl_cont+D'1', F
+
+					
+					
+			}else if(a==13 && b==176){
+062B  2FE8  	GOTO	label127
+062C  300D  	MOVLW 0x0D
+062D  0661  	XORWF interrupt_19_a, W
+062E  1903  	BTFSC STATUS,Z
+062F  0862  	MOVF interrupt_19_a+D'1', W
+0630  1D03  	BTFSS STATUS,Z
+0631  2E72  	GOTO	label105
+0632  30B0  	MOVLW 0xB0
+0633  0663  	XORWF interrupt_19_b, W
+0634  1903  	BTFSC STATUS,Z
+0635  0864  	MOVF interrupt_19_b+D'1', W
+0636  1D03  	BTFSS STATUS,Z
+0637  2E72  	GOTO	label105
+0672        label105
+
+					instruccion(cont);
+0638  0843  	MOVF gbl_cont, W
+0639  1683  	BSF STATUS, RP0
+063A  00CB  	MOVWF instruccio_00015_arg_comando
+063B  1283  	BCF STATUS, RP0
+063C  0844  	MOVF gbl_cont+D'1', W
+063D  1683  	BSF STATUS, RP0
+063E  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+063F  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('6');
+0640  3036  	MOVLW 0x36
+0641  1683  	BSF STATUS, RP0
+0642  00CB  	MOVWF escribirDa_00016_arg_dato
+0643  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+0644  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+0645  300F  	MOVLW 0x0F
+0646  1683  	BSF STATUS, RP0
+0647  00CB  	MOVWF instruccio_00015_arg_comando
+0648  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0649  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+064A  1CCD  	BTFSS gbl_bandera_configuracion,1
+064B  2E64  	GOTO	label103
+0664        label103
+
+						if(bandera_confirmacion_cambio==true){
+064C  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+064D  2E59  	GOTO	label102
+0659        label102
+
+							claveConfirmar[posicion_confirmar_contra]='6';
+064E  1383  	BCF	STATUS,IRP
+064F  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0650  0084  	MOVWF FSR
+0651  0847  	MOVF gbl_posicion_confirmar_contra, W
+0652  0784  	ADDWF FSR, F
+0653  3036  	MOVLW 0x36
+0654  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+0655  0AC7  	INCF gbl_posicion_confirmar_contra, F
+0656  1903  	BTFSC STATUS,Z
+0657  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+0658  2E6E  	GOTO	label104
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='6';			
+0659  1383  	BCF	STATUS,IRP
+065A  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+065B  0084  	MOVWF FSR
+065C  0845  	MOVF gbl_posicion_nueva_contra, W
+065D  0784  	ADDWF FSR, F
+065E  3036  	MOVLW 0x36
+065F  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+0660  0AC5  	INCF gbl_posicion_nueva_contra, F
+0661  1903  	BTFSC STATUS,Z
+0662  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+0663  2E6E  	GOTO	label104
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='6';
+0664  1383  	BCF	STATUS,IRP
+0665  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0666  0084  	MOVWF FSR
+0667  084B  	MOVF gbl_posicion, W
+0668  0784  	ADDWF FSR, F
+0669  3036  	MOVLW 0x36
+066A  0080  	MOVWF INDF
+
+						posicion++;
+066B  0ACB  	INCF gbl_posicion, F
+066C  1903  	BTFSC STATUS,Z
+066D  0ACC  	INCF gbl_posicion+D'1', F
+066E        label104
+
+						
+					}
+					cont++;
+066E  0AC3  	INCF gbl_cont, F
+066F  1903  	BTFSC STATUS,Z
+0670  0AC4  	INCF gbl_cont+D'1', F
+
+							
+			}else if(a==11 && b==224){
+0671  2FE8  	GOTO	label127
+0672  300B  	MOVLW 0x0B
+0673  0661  	XORWF interrupt_19_a, W
+0674  1903  	BTFSC STATUS,Z
+0675  0862  	MOVF interrupt_19_a+D'1', W
+0676  1D03  	BTFSS STATUS,Z
+0677  2EB8  	GOTO	label109
+0678  30E0  	MOVLW 0xE0
+0679  0663  	XORWF interrupt_19_b, W
+067A  1903  	BTFSC STATUS,Z
+067B  0864  	MOVF interrupt_19_b+D'1', W
+067C  1D03  	BTFSS STATUS,Z
+067D  2EB8  	GOTO	label109
+06B8        label109
+
+					instruccion(cont);
+067E  0843  	MOVF gbl_cont, W
+067F  1683  	BSF STATUS, RP0
+0680  00CB  	MOVWF instruccio_00015_arg_comando
+0681  1283  	BCF STATUS, RP0
+0682  0844  	MOVF gbl_cont+D'1', W
+0683  1683  	BSF STATUS, RP0
+0684  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0685  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('1');
+0686  3031  	MOVLW 0x31
+0687  1683  	BSF STATUS, RP0
+0688  00CB  	MOVWF escribirDa_00016_arg_dato
+0689  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+068A  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+068B  300F  	MOVLW 0x0F
+068C  1683  	BSF STATUS, RP0
+068D  00CB  	MOVWF instruccio_00015_arg_comando
+068E  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+068F  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+0690  1CCD  	BTFSS gbl_bandera_configuracion,1
+0691  2EAA  	GOTO	label107
+06AA        label107
+
+						if(bandera_confirmacion_cambio==true){
+0692  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+0693  2E9F  	GOTO	label106
+069F        label106
+
+							claveConfirmar[posicion_confirmar_contra]='1';
+0694  1383  	BCF	STATUS,IRP
+0695  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0696  0084  	MOVWF FSR
+0697  0847  	MOVF gbl_posicion_confirmar_contra, W
+0698  0784  	ADDWF FSR, F
+0699  3031  	MOVLW 0x31
+069A  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+069B  0AC7  	INCF gbl_posicion_confirmar_contra, F
+069C  1903  	BTFSC STATUS,Z
+069D  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+069E  2EB4  	GOTO	label108
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='1';
+069F  1383  	BCF	STATUS,IRP
+06A0  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+06A1  0084  	MOVWF FSR
+06A2  0845  	MOVF gbl_posicion_nueva_contra, W
+06A3  0784  	ADDWF FSR, F
+06A4  3031  	MOVLW 0x31
+06A5  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+06A6  0AC5  	INCF gbl_posicion_nueva_contra, F
+06A7  1903  	BTFSC STATUS,Z
+06A8  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+06A9  2EB4  	GOTO	label108
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='1';
+06AA  1383  	BCF	STATUS,IRP
+06AB  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+06AC  0084  	MOVWF FSR
+06AD  084B  	MOVF gbl_posicion, W
+06AE  0784  	ADDWF FSR, F
+06AF  3031  	MOVLW 0x31
+06B0  0080  	MOVWF INDF
+
+						posicion++;
+06B1  0ACB  	INCF gbl_posicion, F
+06B2  1903  	BTFSC STATUS,Z
+06B3  0ACC  	INCF gbl_posicion+D'1', F
+06B4        label108
+
+						
+					}
+					cont++;
+06B4  0AC3  	INCF gbl_cont, F
+06B5  1903  	BTFSC STATUS,Z
+06B6  0AC4  	INCF gbl_cont+D'1', F
+
+					
+			}else if(a==11 && b==208){
+06B7  2FE8  	GOTO	label127
+06B8  300B  	MOVLW 0x0B
+06B9  0661  	XORWF interrupt_19_a, W
+06BA  1903  	BTFSC STATUS,Z
+06BB  0862  	MOVF interrupt_19_a+D'1', W
+06BC  1D03  	BTFSS STATUS,Z
+06BD  2EFE  	GOTO	label113
+06BE  30D0  	MOVLW 0xD0
+06BF  0663  	XORWF interrupt_19_b, W
+06C0  1903  	BTFSC STATUS,Z
+06C1  0864  	MOVF interrupt_19_b+D'1', W
+06C2  1D03  	BTFSS STATUS,Z
+06C3  2EFE  	GOTO	label113
+06FE        label113
+
+					instruccion(cont);
+06C4  0843  	MOVF gbl_cont, W
+06C5  1683  	BSF STATUS, RP0
+06C6  00CB  	MOVWF instruccio_00015_arg_comando
+06C7  1283  	BCF STATUS, RP0
+06C8  0844  	MOVF gbl_cont+D'1', W
+06C9  1683  	BSF STATUS, RP0
+06CA  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+06CB  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('2');
+06CC  3032  	MOVLW 0x32
+06CD  1683  	BSF STATUS, RP0
+06CE  00CB  	MOVWF escribirDa_00016_arg_dato
+06CF  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+06D0  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+06D1  300F  	MOVLW 0x0F
+06D2  1683  	BSF STATUS, RP0
+06D3  00CB  	MOVWF instruccio_00015_arg_comando
+06D4  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+06D5  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+06D6  1CCD  	BTFSS gbl_bandera_configuracion,1
+06D7  2EF0  	GOTO	label111
+06F0        label111
+
+						if(bandera_confirmacion_cambio==true){
+06D8  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+06D9  2EE5  	GOTO	label110
+06E5        label110
+
+							claveConfirmar[posicion_confirmar_contra]='2';
+06DA  1383  	BCF	STATUS,IRP
+06DB  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+06DC  0084  	MOVWF FSR
+06DD  0847  	MOVF gbl_posicion_confirmar_contra, W
+06DE  0784  	ADDWF FSR, F
+06DF  3032  	MOVLW 0x32
+06E0  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+06E1  0AC7  	INCF gbl_posicion_confirmar_contra, F
+06E2  1903  	BTFSC STATUS,Z
+06E3  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+06E4  2EFA  	GOTO	label112
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='2';		
+06E5  1383  	BCF	STATUS,IRP
+06E6  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+06E7  0084  	MOVWF FSR
+06E8  0845  	MOVF gbl_posicion_nueva_contra, W
+06E9  0784  	ADDWF FSR, F
+06EA  3032  	MOVLW 0x32
+06EB  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+06EC  0AC5  	INCF gbl_posicion_nueva_contra, F
+06ED  1903  	BTFSC STATUS,Z
+06EE  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+06EF  2EFA  	GOTO	label112
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='2';
+06F0  1383  	BCF	STATUS,IRP
+06F1  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+06F2  0084  	MOVWF FSR
+06F3  084B  	MOVF gbl_posicion, W
+06F4  0784  	ADDWF FSR, F
+06F5  3032  	MOVLW 0x32
+06F6  0080  	MOVWF INDF
+
+						posicion++;
+06F7  0ACB  	INCF gbl_posicion, F
+06F8  1903  	BTFSC STATUS,Z
+06F9  0ACC  	INCF gbl_posicion+D'1', F
+06FA        label112
+
+						
+					}
+					cont++;
+06FA  0AC3  	INCF gbl_cont, F
+06FB  1903  	BTFSC STATUS,Z
+06FC  0AC4  	INCF gbl_cont+D'1', F
+
+					
+			}else if(a==11 && b==176){
+06FD  2FE8  	GOTO	label127
+06FE  300B  	MOVLW 0x0B
+06FF  0661  	XORWF interrupt_19_a, W
+0700  1903  	BTFSC STATUS,Z
+0701  0862  	MOVF interrupt_19_a+D'1', W
+0702  1D03  	BTFSS STATUS,Z
+0703  2F44  	GOTO	label117
+0704  30B0  	MOVLW 0xB0
+0705  0663  	XORWF interrupt_19_b, W
+0706  1903  	BTFSC STATUS,Z
+0707  0864  	MOVF interrupt_19_b+D'1', W
+0708  1D03  	BTFSS STATUS,Z
+0709  2F44  	GOTO	label117
+0744        label117
+
+					instruccion(cont);
+070A  0843  	MOVF gbl_cont, W
+070B  1683  	BSF STATUS, RP0
+070C  00CB  	MOVWF instruccio_00015_arg_comando
+070D  1283  	BCF STATUS, RP0
+070E  0844  	MOVF gbl_cont+D'1', W
+070F  1683  	BSF STATUS, RP0
+0710  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0711  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('3');
+0712  3033  	MOVLW 0x33
+0713  1683  	BSF STATUS, RP0
+0714  00CB  	MOVWF escribirDa_00016_arg_dato
+0715  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+0716  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+0717  300F  	MOVLW 0x0F
+0718  1683  	BSF STATUS, RP0
+0719  00CB  	MOVWF instruccio_00015_arg_comando
+071A  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+071B  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+071C  1CCD  	BTFSS gbl_bandera_configuracion,1
+071D  2F36  	GOTO	label115
+0736        label115
+
+						if(bandera_confirmacion_cambio==true){
+071E  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+071F  2F2B  	GOTO	label114
+072B        label114
+
+							claveConfirmar[posicion_confirmar_contra]='3';
+0720  1383  	BCF	STATUS,IRP
+0721  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0722  0084  	MOVWF FSR
+0723  0847  	MOVF gbl_posicion_confirmar_contra, W
+0724  0784  	ADDWF FSR, F
+0725  3033  	MOVLW 0x33
+0726  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+0727  0AC7  	INCF gbl_posicion_confirmar_contra, F
+0728  1903  	BTFSC STATUS,Z
+0729  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+072A  2F40  	GOTO	label116
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='3';		
+072B  1383  	BCF	STATUS,IRP
+072C  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+072D  0084  	MOVWF FSR
+072E  0845  	MOVF gbl_posicion_nueva_contra, W
+072F  0784  	ADDWF FSR, F
+0730  3033  	MOVLW 0x33
+0731  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+0732  0AC5  	INCF gbl_posicion_nueva_contra, F
+0733  1903  	BTFSC STATUS,Z
+0734  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+0735  2F40  	GOTO	label116
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='3';
+0736  1383  	BCF	STATUS,IRP
+0737  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+0738  0084  	MOVWF FSR
+0739  084B  	MOVF gbl_posicion, W
+073A  0784  	ADDWF FSR, F
+073B  3033  	MOVLW 0x33
+073C  0080  	MOVWF INDF
+
+						posicion++;
+073D  0ACB  	INCF gbl_posicion, F
+073E  1903  	BTFSC STATUS,Z
+073F  0ACC  	INCF gbl_posicion+D'1', F
+0740        label116
+
+						
+					}
+					cont++;
+0740  0AC3  	INCF gbl_cont, F
+0741  1903  	BTFSC STATUS,Z
+0742  0AC4  	INCF gbl_cont+D'1', F
+
+							
+			}else if(a==7 && b==224){
+0743  2FE8  	GOTO	label127
+0744  3007  	MOVLW 0x07
+0745  0661  	XORWF interrupt_19_a, W
+0746  1903  	BTFSC STATUS,Z
+0747  0862  	MOVF interrupt_19_a+D'1', W
+0748  1D03  	BTFSS STATUS,Z
+0749  2F75  	GOTO	label120
+074A  30E0  	MOVLW 0xE0
+074B  0663  	XORWF interrupt_19_b, W
+074C  1903  	BTFSC STATUS,Z
+074D  0864  	MOVF interrupt_19_b+D'1', W
+074E  1D03  	BTFSS STATUS,Z
+074F  2F75  	GOTO	label120
+0775        label120
+
+					instruccion(cont);
+0750  0843  	MOVF gbl_cont, W
+0751  1683  	BSF STATUS, RP0
+0752  00CB  	MOVWF instruccio_00015_arg_comando
+0753  1283  	BCF STATUS, RP0
+0754  0844  	MOVF gbl_cont+D'1', W
+0755  1683  	BSF STATUS, RP0
+0756  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0757  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('A');
+0758  3041  	MOVLW 0x41
+0759  1683  	BSF STATUS, RP0
+075A  00CB  	MOVWF escribirDa_00016_arg_dato
+075B  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+075C  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+075D  300F  	MOVLW 0x0F
+075E  1683  	BSF STATUS, RP0
+075F  00CB  	MOVWF instruccio_00015_arg_comando
+0760  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0761  202B  	CALL instruccio_00015
+
+					limpiarLCD();
+0762  20E8  	CALL limpiarLCD_00000
+
+					//si la caja se encuentra desbloqueada y se pulsa este boton, entre al modo de configuracion:
+					if(desbloqueado==true){
+0763  1C4D  	BTFSS gbl_desbloqueado,0
+0764  2F6F  	GOTO	label119
+076F        label119
+
+						//si la contrasena ingresada es correcta, esta variable pasara a ser true en el metodo validarContrasena:
+						bandera_modificar=false;
+0765  11CD  	BCF gbl_bandera_modificar,3
+
+						
+						//se valida si la contrasena es correcta:
+						validarContrasena();
+0766  2203  	CALL validarCon_00025
+
+						if(bandera_modificar==true){
+0767  1DCD  	BTFSS gbl_bandera_modificar,3
+0768  2F6D  	GOTO	label118
+076D        label118
+
+							//se muestra el mensaje indicando el ingreso de nueva contrasena:
+							mostrarMensajeIngresoContrasena();
+0769  228B  	CALL mostrarMen_0001D
+
+							limpiarLCD();
+076A  20E8  	CALL limpiarLCD_00000
+
+							bandera_configuracion=true;
+076B  14CD  	BSF gbl_bandera_configuracion,1
+
+						//de lo contrario muestre un mensaje de error:					
+						}else{
+076C  2FE8  	GOTO	label127
+
+							mensajeIncorrecto();
+076D  2131  	CALL mensajeInc_00022
+
+							
+						}
+						
+						//cont=128;
+					
+					//de lo contrario muestre un mensaje indicando a el usuario que la opcion no esta disponible:
+					}else{
+076E  2FE8  	GOTO	label127
+
+						instruccion(15);
+076F  300F  	MOVLW 0x0F
+0770  1683  	BSF STATUS, RP0
+0771  00CB  	MOVWF instruccio_00015_arg_comando
+0772  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0773  202B  	CALL instruccio_00015
+
+					}
+					
+					
+			}else if(a==7 && b==208){
+0774  2FE8  	GOTO	label127
+0775  3007  	MOVLW 0x07
+0776  0661  	XORWF interrupt_19_a, W
+0777  1903  	BTFSC STATUS,Z
+0778  0862  	MOVF interrupt_19_a+D'1', W
+0779  1D03  	BTFSS STATUS,Z
+077A  2FBB  	GOTO	label124
+077B  30D0  	MOVLW 0xD0
+077C  0663  	XORWF interrupt_19_b, W
+077D  1903  	BTFSC STATUS,Z
+077E  0864  	MOVF interrupt_19_b+D'1', W
+077F  1D03  	BTFSS STATUS,Z
+0780  2FBB  	GOTO	label124
+07BB        label124
+
+					instruccion(cont);
+0781  0843  	MOVF gbl_cont, W
+0782  1683  	BSF STATUS, RP0
+0783  00CB  	MOVWF instruccio_00015_arg_comando
+0784  1283  	BCF STATUS, RP0
+0785  0844  	MOVF gbl_cont+D'1', W
+0786  1683  	BSF STATUS, RP0
+0787  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+0788  202B  	CALL instruccio_00015
+
+					//se envía el dato para ser escrito:
+					escribirDato('0');
+0789  3030  	MOVLW 0x30
+078A  1683  	BSF STATUS, RP0
+078B  00CB  	MOVWF escribirDa_00016_arg_dato
+078C  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+078D  2036  	CALL escribirDa_00016
+
+					instruccion(15);
+078E  300F  	MOVLW 0x0F
+078F  1683  	BSF STATUS, RP0
+0790  00CB  	MOVWF instruccio_00015_arg_comando
+0791  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+0792  202B  	CALL instruccio_00015
+
+					//si actualmente se encuentra en el modo de configuracion:
+					if(bandera_configuracion==true){
+0793  1CCD  	BTFSS gbl_bandera_configuracion,1
+0794  2FAD  	GOTO	label122
+07AD        label122
+
+						if(bandera_confirmacion_cambio==true){
+0795  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+0796  2FA2  	GOTO	label121
+07A2        label121
+
+							claveConfirmar[posicion_confirmar_contra]='0';
+0797  1383  	BCF	STATUS,IRP
+0798  3038  	MOVLW LOW(gbl_claveConfirmar+D'0')
+0799  0084  	MOVWF FSR
+079A  0847  	MOVF gbl_posicion_confirmar_contra, W
+079B  0784  	ADDWF FSR, F
+079C  3030  	MOVLW 0x30
+079D  0080  	MOVWF INDF
+
+							posicion_confirmar_contra++;
+079E  0AC7  	INCF gbl_posicion_confirmar_contra, F
+079F  1903  	BTFSC STATUS,Z
+07A0  0AC8  	INCF gbl_posicion_confirmar_contra+D'1', F
+
+
+						}else{	
+07A1  2FB7  	GOTO	label123
+
+							//se esta ingresando en el modo configuracion:
+							nuevaContrasena[posicion_nueva_contra]='0';		
+07A2  1383  	BCF	STATUS,IRP
+07A3  3030  	MOVLW LOW(gbl_nuevaContrasena+D'0')
+07A4  0084  	MOVWF FSR
+07A5  0845  	MOVF gbl_posicion_nueva_contra, W
+07A6  0784  	ADDWF FSR, F
+07A7  3030  	MOVLW 0x30
+07A8  0080  	MOVWF INDF
+
+							posicion_nueva_contra++;
+07A9  0AC5  	INCF gbl_posicion_nueva_contra, F
+07AA  1903  	BTFSC STATUS,Z
+07AB  0AC6  	INCF gbl_posicion_nueva_contra+D'1', F
+
+						}
+					}else{
+07AC  2FB7  	GOTO	label123
+
+						//de lo contrario es porque la caja se encuentra bloqueada:
+						//se agrega el dato en el vector:
+						contrasenaIngresada[posicion]='0';
+07AD  1383  	BCF	STATUS,IRP
+07AE  3028  	MOVLW LOW(gbl_contrasenaIngresada+D'0')
+07AF  0084  	MOVWF FSR
+07B0  084B  	MOVF gbl_posicion, W
+07B1  0784  	ADDWF FSR, F
+07B2  3030  	MOVLW 0x30
+07B3  0080  	MOVWF INDF
+
+						posicion++;
+07B4  0ACB  	INCF gbl_posicion, F
+07B5  1903  	BTFSC STATUS,Z
+07B6  0ACC  	INCF gbl_posicion+D'1', F
+07B7        label123
+
+						
+					}
+					cont++;
+07B7  0AC3  	INCF gbl_cont, F
+07B8  1903  	BTFSC STATUS,Z
+07B9  0AC4  	INCF gbl_cont+D'1', F
+
+					
+			}else if(a==7 && b==176){
+07BA  2FE8  	GOTO	label127
+07BB  3007  	MOVLW 0x07
+07BC  0661  	XORWF interrupt_19_a, W
+07BD  1903  	BTFSC STATUS,Z
+07BE  0862  	MOVF interrupt_19_a+D'1', W
+07BF  1D03  	BTFSS STATUS,Z
+07C0  2FE8  	GOTO	label127
+07C1  30B0  	MOVLW 0xB0
+07C2  0663  	XORWF interrupt_19_b, W
+07C3  1903  	BTFSC STATUS,Z
+07C4  0864  	MOVF interrupt_19_b+D'1', W
+07C5  1D03  	BTFSS STATUS,Z
+07C6  2FE8  	GOTO	label127
+
+					
+					//si solo esta activa la bandera de configuracion pida verificar la clave:
+					if(bandera_configuracion==true && bandera_confirmacion_cambio==false){
+07C7  1CCD  	BTFSS gbl_bandera_configuracion,1
+07C8  2FE1  	GOTO	label125
+07C9  194D  	BTFSC gbl_bandera_confirmacion_cambio,2
+07CA  2FE1  	GOTO	label125
+07E1        label125
+
+						instruccion(cont);
+07CB  0843  	MOVF gbl_cont, W
+07CC  1683  	BSF STATUS, RP0
+07CD  00CB  	MOVWF instruccio_00015_arg_comando
+07CE  1283  	BCF STATUS, RP0
+07CF  0844  	MOVF gbl_cont+D'1', W
+07D0  1683  	BSF STATUS, RP0
+07D1  00CC  	MOVWF instruccio_00015_arg_comando+D'1'
+07D2  202B  	CALL instruccio_00015
+
+						//se envía el dato para ser escrito:
+						escribirDato('B');
+07D3  3042  	MOVLW 0x42
+07D4  1683  	BSF STATUS, RP0
+07D5  00CB  	MOVWF escribirDa_00016_arg_dato
+07D6  01CC  	CLRF escribirDa_00016_arg_dato+D'1'
+07D7  2036  	CALL escribirDa_00016
+
+						instruccion(15);
+07D8  300F  	MOVLW 0x0F
+07D9  1683  	BSF STATUS, RP0
+07DA  00CB  	MOVWF instruccio_00015_arg_comando
+07DB  01CC  	CLRF instruccio_00015_arg_comando+D'1'
+07DC  202B  	CALL instruccio_00015
+
+						bandera_confirmacion_cambio=true;
+07DD  154D  	BSF gbl_bandera_confirmacion_cambio,2
+
+						mostrarMensajeConfirmar();
+07DE  2247  	CALL mostrarMen_0001E
+
+						limpiarLCD();
+07DF  20E8  	CALL limpiarLCD_00000
+
+						
+					//si ambas vanderas estan activas, realice las validaciones y confirme el cambio de contrasena:	
+					}else if(bandera_confirmacion_cambio==true && bandera_configuracion==true){
+07E0  2FE8  	GOTO	label127
+07E1  1D4D  	BTFSS gbl_bandera_confirmacion_cambio,2
+07E2  2FE7  	GOTO	label126
+07E3  1CCD  	BTFSS gbl_bandera_configuracion,1
+07E4  2FE7  	GOTO	label126
+07E7        label126
+
+						cambiarClave();
+07E5  2349  	CALL cambiarCla_00026
+
+						//de lo contrario, simplemente valide la contrasena
+					}else{
+07E6  2FE8  	GOTO	label127
+07E8        label127
+
+					
+						validarContrasena();		
+07E7  2203  	CALL validarCon_00025
+
+					}
+					
+			}
+			
+			//Se levanta la bandera de interrupcion:
+			intcon.GIE=1;
+07E8  178B  	BSF gbl_intcon,7
+
+		}
+		
+	}
+}
+07E9  0E42  	SWAPF Int1BContext+D'2', W
+07EA  0084  	MOVWF FSR
+07EB  0E41  	SWAPF Int1BContext+D'1', W
+07EC  008A  	MOVWF PCLATH
+07ED  0E40  	SWAPF Int1BContext, W
+07EE  0083  	MOVWF STATUS
+07EF  0EFF  	SWAPF Int1Context, F
+07F0  0E7F  	SWAPF Int1Context, W
+07F1  0009  	RETFIE
+
+
+
+//----------------------------------------Inicializacion de variables, Hilo principal---------------------------------------------------
+/**
+*Se realizan las configuraciones iniciales para escuchar por teclado
+*cada que el usuario ingresa un número.
+*/
+void main(void) {
+
+
+    //-------------------------------------------Configuraciones de puertos:--------------------------------------------------
+    //configurando puerto C como salida de datos:
+    trisc = 0;
+0450  1683  	BSF STATUS, RP0
+0451  1303  	BCF STATUS, RP1
+0452  0187  	CLRF gbl_trisc
+
+    //configurando puerto A como entrada de datos el nible alto y el pin 0, y como salida de datos el nible bajo exceto el pin 0:
+    trisb=241;
+0453  30F1  	MOVLW 0xF1
+0454  0086  	MOVWF gbl_trisb
+
+    //configurando el puerto a únicamente como digital
+    adcon1 = 6;
+0455  3006  	MOVLW 0x06
+0456  009F  	MOVWF gbl_adcon1
+
+    //configurando el puerto a como salida, por este puerto se enviarán los comandos a el lcd.
+    trisa = 0;
+0457  0185  	CLRF gbl_trisa
+
+    //
+    option_reg.7 = 0;
+0458  1381  	BCF gbl_option_reg,7
+
+    
+    //--------------------------Configuracion Interrupciones---------------------------------------------
+     // INTERRUPCIONES DE RB4 A 4B7 ON
+    intcon.RBIE=1;
+0459  158B  	BSF gbl_intcon,3
+
+    intcon.GIE=1;    
+045A  178B  	BSF gbl_intcon,7
+
+    
+    //se enciende la interrupción externa:
+    intcon.INTE=1;
+045B  160B  	BSF gbl_intcon,4
+
+
+	//se inicializa el puerto b en cero:
+	portb=0;
+045C  1283  	BCF STATUS, RP0
+045D  0186  	CLRF gbl_portb
+
+	
+	
+	//se pone a rotar el cero por los primeros 4 bits del puerto a:
+    while (1){
+045E        label76
+048C  2C5E  	GOTO	label76
+
+    
+        porta=14;
+045E  300E  	MOVLW 0x0E
+045F  0085  	MOVWF gbl_porta
+
+        delay_ms(57);
+0460  3039  	MOVLW 0x39
+0461  00FE  	MOVWF delay_ms_00000_arg_del
+0462  2010  	CALL delay_ms_00000
+
+        porta=13;
+0463  300D  	MOVLW 0x0D
+0464  0085  	MOVWF gbl_porta
+
+        delay_ms(57);
+0465  3039  	MOVLW 0x39
+0466  00FE  	MOVWF delay_ms_00000_arg_del
+0467  2010  	CALL delay_ms_00000
+
+        porta=11;
+0468  300B  	MOVLW 0x0B
+0469  0085  	MOVWF gbl_porta
+
+        delay_ms(57);
+046A  3039  	MOVLW 0x39
+046B  00FE  	MOVWF delay_ms_00000_arg_del
+046C  2010  	CALL delay_ms_00000
+
+        porta=7;
+046D  3007  	MOVLW 0x07
+046E  0085  	MOVWF gbl_porta
+
+        //si la caja se encuentra apagada:
+        if(portb.1==1){
+046F  1C86  	BTFSS gbl_portb,1
+0470  2C76  	GOTO	label77
+0476        label77
+
+			desbloqueado=false;
+0471  104D  	BCF gbl_desbloqueado,0
+
+			bandera_configuracion=false;
+0472  10CD  	BCF gbl_bandera_configuracion,1
+
+			bandera_confirmacion_cambio=false;
+0473  114D  	BCF gbl_bandera_confirmacion_cambio,2
+
+			
+			mensajeCajaCerrada();
+0474  2408  	CALL mensajeCaj_0001A
+
+				
+        }else{
+0475  2C5E  	GOTO	label76
+
+			//El mensaje que se debe mostrar cuando la caja esta en modo de espera y bloqueada:
+			if(cont==128 && desbloqueado==false && bandera_configuracion==false){
+0476  3080  	MOVLW 0x80
+0477  0643  	XORWF gbl_cont, W
+0478  1903  	BTFSC STATUS,Z
+0479  0844  	MOVF gbl_cont+D'1', W
+047A  1D03  	BTFSS STATUS,Z
+047B  2C82  	GOTO	label78
+047C  184D  	BTFSC gbl_desbloqueado,0
+047D  2C82  	GOTO	label78
+047E  18CD  	BTFSC gbl_bandera_configuracion,1
+047F  2C82  	GOTO	label78
+0482        label78
+
+			
+				mensajeIngresoContrasena();
+0480  23C0  	CALL mensajeIng_0001B
+
+				
+			//si la caja se encuentra desbloqueada y en estado de espera:
+			}else if(cont==128 && desbloqueado==true && bandera_configuracion==false){
+0481  2C5E  	GOTO	label76
+0482  3080  	MOVLW 0x80
+0483  0643  	XORWF gbl_cont, W
+0484  1903  	BTFSC STATUS,Z
+0485  0844  	MOVF gbl_cont+D'1', W
+0486  1D03  	BTFSS STATUS,Z
+0487  2C5E  	GOTO	label76
+0488  1C4D  	BTFSS gbl_desbloqueado,0
+0489  2C5E  	GOTO	label76
+048A  1CCD  	BTFSS gbl_bandera_configuracion,1
+
+				mensajeCorrecto();	
+048B  2043  	CALL mensajeCor_0001F
+
+			}
+		}
+    };
+
+}
+
+}
+////////////////////////////////////////
+// Code with no source :-)
+////////////////////////////////////////
+0000  2C8D  	GOTO	_startup
+
+0004  00FF  	MOVWF Int1Context
+0005  0E03  	SWAPF STATUS, W
+0006  1283  	BCF STATUS, RP0
+0007  1303  	BCF STATUS, RP1
+0008  00C0  	MOVWF Int1BContext
+0009  0E0A  	SWAPF PCLATH, W
+000A  00C1  	MOVWF Int1BContext+D'1'
+000B  0E04  	SWAPF FSR, W
+000C  00C2  	MOVWF Int1BContext+D'2'
+000D  118A  	BCF PCLATH,3
+000E  120A  	BCF PCLATH,4
+000F  2CAA  	GOTO	interrupt
+0010        delay_ms_00000
+0010        ; { delay_ms ; function begin
+0010  08FE  	MOVF delay_ms_00000_arg_del, F
+0011  1D03  	BTFSS STATUS,Z
+0012  2814  	GOTO	label1
+0013  0008  	RETURN
+0014        label1
+0014  30F9  	MOVLW 0xF9
+0015        label2
+0015  3EFF  	ADDLW 0xFF
+0016  1D03  	BTFSS STATUS,Z
+0017  2815  	GOTO	label2
+0018  0000  	NOP
+0019  0BFE  	DECFSZ delay_ms_00000_arg_del, F
+001A  2814  	GOTO	label1
+001B  0008  	RETURN
+001C        ; } delay_ms function end
+
+001C        delay_s_00000
+001C        ; { delay_s ; function begin
+001C        label3
+001C  30FA  	MOVLW 0xFA
+001D  00FE  	MOVWF delay_ms_00000_arg_del
+001E  2010  	CALL delay_ms_00000
+001F  30FA  	MOVLW 0xFA
+0020  00FE  	MOVWF delay_ms_00000_arg_del
+0021  2010  	CALL delay_ms_00000
+0022  30FA  	MOVLW 0xFA
+0023  00FE  	MOVWF delay_ms_00000_arg_del
+0024  2010  	CALL delay_ms_00000
+0025  30FA  	MOVLW 0xFA
+0026  00FE  	MOVWF delay_ms_00000_arg_del
+0027  2010  	CALL delay_ms_00000
+0028  0BF6  	DECFSZ delay_s_00000_arg_del, F
+0029  281C  	GOTO	label3
+002A  0008  	RETURN
+002B        ; } delay_s function end
+
+
+048D        _startup
+
+04A7  118A  	BCF PCLATH,3
+04A8  120A  	BCF PCLATH,4
+04A9  2C50  	GOTO	main

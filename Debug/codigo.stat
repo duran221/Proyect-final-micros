@@ -1,0 +1,30 @@
+// SourceBoost Linker Function Resource Usage Dump
+
+#GLOBAL:"global",line = 0,ram = 46.4,rom = 0;
+habilitarTransmisionSerial(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 42,ram = 0.0,rom = 12;
+desactivarTransmisionSerial(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 71,ram = 0.0,rom = 9;
+instruccion(signed short):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 92,ram = 2.0,rom = 11;
+limpiarLCD(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 112,ram = 0.0,rom = 16;
+escribirDato(signed short):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 126,ram = 2.0,rom = 13;
+transmitir(signed short):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 151,ram = 0.0,rom = 5;
+mostrarMensajeBloqueoTerminal(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 160,ram = 26.0,rom = 66;
+mostrarMensajeDesbloqueoTerminal(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 174,ram = 24.0,rom = 64;
+mensajeCajaCerrada(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 193,ram = 19.0,rom = 72;
+mensajeIngresoContrasena(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 217,ram = 16.0,rom = 72;
+mostrarMensajeBloqueo(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 241,ram = 16.0,rom = 65;
+mostrarMensajeIngresoContrasena(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 263,ram = 14.0,rom = 61;
+mostrarMensajeConfirmar(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 285,ram = 17.0,rom = 68;
+mensajeCorrecto(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 306,ram = 21.0,rom = 82;
+mensajeCambioContrasena(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 323,ram = 14.0,rom = 61;
+mensajeErrorCambio(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 343,ram = 20.0,rom = 69;
+mensajeIncorrecto(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 366,ram = 15.0,rom = 80;
+reiniciarClave(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 400,ram = 2.0,rom = 24;
+reiniciarClaveIngresada(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 407,ram = 2.0,rom = 24;
+validarContrasena(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 418,ram = 4.1,rom = 68;
+cambiarClave(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 455,ram = 4.1,rom = 119;
+interrupt(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 512,ram = 4.0,rom = 840;
+main(void):"C:\Users\crist\OneDrive\Documentos\Universidad\Microprocesadores\ProyectoFinalSolucion\mostrar_mensaje_interrupcion\codigo.c",line = 869,ram = 0.0,rom = 61;
+delay_ms(unsigned char):"NoSourceFile",line = 0,ram = 0.0,rom = 12;
+delay_s(unsigned char):"NoSourceFile",line = 0,ram = 1.0,rom = 15;
+_startup(void):"NoSourceFile",line = 0,ram = 0.0,rom = 29;
+#HEAP_BLOCK: 0, 205, 50;
